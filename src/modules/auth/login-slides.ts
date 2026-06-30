@@ -1,5 +1,8 @@
-/** Coloque o arquivo em public/login/login-video.mp4 */
+import { getLoginVideoSrc } from '@/lib/login-assets'
+
 export const LOGIN_VIDEO = {
-  src: '/login/login-video.mp4',
   poster: '/login/slide-1.svg',
+  get src() {
+    return getLoginVideoSrc()
+  },
 } as const

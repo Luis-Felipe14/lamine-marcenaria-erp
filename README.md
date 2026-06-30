@@ -90,6 +90,29 @@ src/
 - `npm run preview` — preview do build
 - `npm run deploy:cloudflare` — publica o `dist/` no Cloudflare Pages (requer Wrangler logado)
 
+## Vídeo da tela de login (Supabase Storage)
+
+O vídeo **não vai para o GitHub** (arquivo grande). Em **produção**, o app busca no bucket público `login-assets`; em **desenvolvimento**, usa `public/login/login-video.mp4`.
+
+### Configuração (uma vez)
+
+1. Aplique a migration `042_login_assets_storage.sql` no SQL Editor do Supabase
+2. Envie o vídeo com nome fixo `login-video.mp4`:
+
+**Painel Supabase:** Storage → `login-assets` → Upload
+
+**Ou via script (CLI linkada ao projeto):**
+
+```powershell
+.\scripts\upload-login-video.ps1
+```
+
+URL gerada automaticamente:
+
+`https://SEU-PROJETO.supabase.co/storage/v1/object/public/login-assets/login-video.mp4`
+
+Override opcional no `.env` / Cloudflare: `VITE_LOGIN_VIDEO_URL` com essa URL completa.
+
 ## Deploy no Cloudflare Pages
 
 O frontend é uma SPA estática (Vite + React). O backend continua no **Supabase** (banco, auth e edge functions).
