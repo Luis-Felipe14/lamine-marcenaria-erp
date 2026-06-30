@@ -129,10 +129,18 @@ O frontend é uma SPA estática (Vite + React). O backend continua no **Supabase
 1. Envie o código para GitHub/GitLab
 2. **Workers & Pages → Create → Pages → Connect to Git**
 3. Configuração do build:
-   - **Framework preset:** Vite
-   - **Build command:** `npm run build`
-   - **Build output directory:** `dist`
-   - **Node version:** 20
+
+| Campo | Valor |
+|--------|--------|
+| **Framework preset** | Vite |
+| **Build command** | `npm run build` |
+| **Build output directory** | `dist` |
+| **Deploy command** | `npx wrangler deploy --assets=./dist` |
+| **Non-production branch deploy command** | `npx wrangler versions upload --assets=./dist` |
+| **Node version** | `20` |
+
+> Projeto no Cloudflare é **Workers** (não Pages clássico). O `wrangler.toml` publica `./dist` com roteamento SPA.
+
 4. **Environment variables** (Production):
    - `VITE_SUPABASE_URL`
    - `VITE_SUPABASE_ANON_KEY`
