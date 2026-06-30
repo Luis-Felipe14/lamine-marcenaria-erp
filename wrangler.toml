@@ -1,0 +1,6 @@
+# Cloudflare Pages — Laminê ERP
+# Deploy manual: npm run build && npm run deploy:cloudflare
+
+name = "lamine-erp"
+compatibility_date = "2024-08-01"
+pages_build_output_dir = "./dist"

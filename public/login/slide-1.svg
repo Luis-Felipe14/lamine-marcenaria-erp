@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0a0a0a"/>
+      <stop offset="0.55" stop-color="#121212"/>
+      <stop offset="1" stop-color="#1a1510"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="35%" cy="35%" r="60%">
+      <stop offset="0" stop-color="#c9a227" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="shine" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#ffffff" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="1000" fill="url(#bg)"/>
+  <rect width="1600" height="1000" fill="url(#glow)"/>
+  <g opacity="0.85">
+    <g transform="translate(280 480)">
+      <rect x="-140" y="-80" width="280" height="160" fill="none" stroke="#c9a227" stroke-width="4" opacity="0.35" rx="4"/>
+      <rect x="-100" y="-50" width="200" height="100" fill="none" stroke="#ffffff" stroke-width="3" opacity="0.15" rx="2"/>
+      <line x1="-120" y1="0" x2="120" y2="0" stroke="#c9a227" stroke-width="2" opacity="0.25"/>
+      <line x1="0" y1="-60" x2="0" y2="60" stroke="#c9a227" stroke-width="2" opacity="0.25"/>
+    </g>
+    <g transform="translate(820 360) rotate(-8)">
+      <rect x="-110" y="-65" width="220" height="130" fill="none" stroke="#9a7b1a" stroke-width="4" opacity="0.3" rx="4"/>
+      <rect x="-70" y="-40" width="140" height="80" fill="#c9a227" opacity="0.06" rx="2"/>
+    </g>
+    <g transform="translate(1150 580) rotate(12)">
+      <path d="M-100,-20 L100,-20 L100,20 L-100,20 Z" fill="none" stroke="#c9a227" stroke-width="4" opacity="0.28"/>
+      <path d="M-60,-12 L60,-12 L60,12 L-60,12 Z" fill="none" stroke="#ffffff" stroke-width="2" opacity="0.12"/>
+    </g>
+  </g>
+  <g transform="translate(-200 0) rotate(-12 800 500)">
+    <rect x="0" y="120" width="2200" height="90" fill="url(#shine)" opacity="0.85"/>
+  </g>
+  <text x="80" y="900" font-family="Inter, Arial, sans-serif" font-size="72" font-weight="200" letter-spacing="0.18em" fill="#B59F85" opacity="0.95">LAMIN</text>
+  <text x="80" y="940" font-family="Inter, Arial, sans-serif" font-size="18" letter-spacing="0.28em" fill="#ffffff" opacity="0.45">MARCENARIA &amp; INTERIORES</text>
+</svg>

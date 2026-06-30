@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 88" fill="none" role="img" aria-label="Lamin� Marcenaria & Interiores">
+  <g fill="#B59F85">
+    <!-- L -->
+    <path d="M4 6h7v58h22v7H4V6z"/>
+    <!-- A (sem barra) -->
+    <path d="M38 71V6h7l18 52V6h6v65h-7L44 19v52H38z"/>
+    <!-- M -->
+    <path d="M88 6h7l12 38 12-38h7v65h-7V22l-13 40h-5L98 22v49h-7V6z"/>
+    <!-- I -->
+    <rect x="132" y="6" width="7" height="65" rx="0.5"/>
+    <!-- N -->
+    <path d="M148 6h7v49l28-49h7v65h-7V22l-28 49h-7V6z"/>
+    <!-- � -->
+    <path d="M198 6h34v7h-27v18h24v7h-24v19h28v7h-35V6z"/>
+    <rect x="210" y="1" width="18" height="2.5" rx="1"/>
+  </g>
+  <text
+    x="198"
+    y="84"
+    fill="#B59F85"
+    font-family="Inter, system-ui, sans-serif"
+    font-size="9.5"
+    font-weight="500"
+    letter-spacing="0.22em"
+  >MARCENARIA &amp; INTERIORES</text>
+</svg>

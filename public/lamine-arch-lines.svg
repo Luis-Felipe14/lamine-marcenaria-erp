@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="720" viewBox="0 0 960 720" fill="none">
+  <defs>
+    <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M48 0H0V48" stroke="#6b7280" stroke-width="0.2" opacity="0.25" />
+    </pattern>
+  </defs>
+  <rect width="960" height="720" fill="url(#grid)" opacity="0.35" />
+  <g stroke="#9ca3af" stroke-width="0.28" opacity="0.4">
+    <rect x="120" y="96" width="220" height="140" rx="1" />
+    <rect x="360" y="96" width="180" height="140" rx="1" />
+    <rect x="120" y="260" width="420" height="72" rx="1" />
+    <rect x="580" y="120" width="240" height="320" rx="1" />
+    <line x1="120" y1="96" x2="120" y2="332" stroke-dasharray="3 4" opacity="0.4" />
+    <line x1="340" y1="96" x2="340" y2="236" stroke-dasharray="3 4" opacity="0.4" />
+    <line x1="120" y1="236" x2="540" y2="236" stroke-dasharray="3 4" opacity="0.4" />
+    <line x1="580" y1="120" x2="820" y2="120" opacity="0.35" />
+    <line x1="820" y1="120" x2="820" y2="440" opacity="0.35" />
+    <line x1="580" y1="440" x2="820" y2="440" opacity="0.35" />
+    <line x1="580" y1="120" x2="580" y2="440" opacity="0.35" />
+  </g>
+  <g stroke="#6b7280" stroke-width="0.22" opacity="0.35">
+    <line x1="80" y1="200" x2="120" y2="200" />
+    <line x1="80" y1="190" x2="80" y2="210" />
+    <text x="62" y="204" fill="#6b7280" font-family="Inter, sans-serif" font-size="7" opacity="0.5">600</text>
+    <line x1="700" y1="460" x2="820" y2="460" />
+    <line x1="700" y1="450" x2="700" y2="470" />
+    <line x1="820" y1="450" x2="820" y2="470" />
+    <text x="748" y="478" fill="#6b7280" font-family="Inter, sans-serif" font-size="7" opacity="0.5">2400</text>
+  </g>
+  <g stroke="#78716c" stroke-width="0.22" opacity="0.28">
+    <path d="M48 520 L160 520 L160 580 L48 580 Z" />
+    <path d="M200 520 L320 520 L320 600 L200 600 Z" />
+    <line x1="48" y1="600" x2="400" y2="600" stroke-dasharray="2 5" />
+  </g>
+</svg>

@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000">
+  <defs>
+    <linearGradient id="bg2" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#0e0e0e"/>
+      <stop offset="0.5" stop-color="#181818"/>
+      <stop offset="1" stop-color="#1f1a12"/>
+    </linearGradient>
+    <radialGradient id="glow2" cx="70%" cy="60%" r="55%">
+      <stop offset="0" stop-color="#e4c65a" stop-opacity="0.2"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="pat" width="360" height="100" patternUnits="userSpaceOnUse">
+      <rect width="360" height="100" fill="#141414"/>
+      <text x="10" y="38" fill="#2a2a2a" font-family="Inter, sans-serif" font-size="34" font-weight="200" letter-spacing="0.18em">LAMIN</text>
+      <text x="190" y="38" fill="#2a2a2a" font-family="Inter, sans-serif" font-size="34" font-weight="200" letter-spacing="0.18em">LAMIN</text>
+      <text x="100" y="88" fill="#2a2a2a" font-family="Inter, sans-serif" font-size="34" font-weight="200" letter-spacing="0.18em">LAMIN</text>
+      <text x="280" y="88" fill="#2a2a2a" font-family="Inter, sans-serif" font-size="34" font-weight="200" letter-spacing="0.18em">LAMIN</text>
+    </pattern>
+  </defs>
+  <rect width="1600" height="1000" fill="url(#bg2)"/>
+  <rect width="1600" height="1000" fill="url(#pat)" opacity="0.55"/>
+  <rect width="1600" height="1000" fill="url(#glow2)"/>
+  <rect x="0" y="0" width="1600" height="1000" fill="rgba(10,10,10,0.45)"/>
+  <text x="80" y="880" font-family="Inter, Arial, sans-serif" font-size="28" letter-spacing="0.35em" fill="#c9a227" opacity="0.9">ERP PREMIUM</text>
+  <text x="80" y="930" font-family="Inter, Arial, sans-serif" font-size="16" letter-spacing="0.2em" fill="#ffffff" opacity="0.5">GESTÃO EMPRESARIAL</text>
+</svg>
