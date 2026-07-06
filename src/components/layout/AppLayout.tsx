@@ -6,7 +6,7 @@ import { Header } from './Header'
 import { PageTransition } from './PageTransition'
 import { CommandPalette } from '@/components/shared/CommandPalette'
 import { PwaInstallBanner } from '@/components/shared/PwaInstallBanner'
-import { useIsMobile } from '@/hooks/useIsMobile'
+import { useViewport } from '@/hooks/useViewport'
 import { useUIStore } from '@/stores/uiStore'
 import { cn } from '@/lib/utils'
 
@@ -17,20 +17,25 @@ export function AppLayout() {
   const headerKpisVisible = useUIStore((s) => s.headerKpisVisible)
   const addRecentPage = useUIStore((s) => s.addRecentPage)
   const location = useLocation()
-  const isMobile = useIsMobile()
+  const { tier, usesDrawerNav, isTablet } = useViewport()
+  const setSidebarCollapsed = useUIStore((s) => s.setSidebarCollapsed)
+
+  useEffect(() => {
+    if (tier === 'tablet') setSidebarCollapsed(true)
+  }, [tier, setSidebarCollapsed])
 
   useEffect(() => {
     setMobileNavOpen(false)
   }, [location.pathname, setMobileNavOpen])
 
   useEffect(() => {
-    if (!isMobile || !mobileNavOpen) return
+    if (!usesDrawerNav || !mobileNavOpen) return
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     return () => {
       document.body.style.overflow = prev
     }
-  }, [isMobile, mobileNavOpen])
+  }, [usesDrawerNav, mobileNavOpen])
 
   useEffect(() => {
     addRecentPage(location.pathname)
@@ -39,9 +44,9 @@ export function AppLayout() {
   return (
     <>
       <AppBackground />
-      <div className="app-shell">
+      <div className="app-shell" data-viewport={tier}>
         <CommandPalette />
-        {isMobile && mobileNavOpen && (
+        {usesDrawerNav && mobileNavOpen && (
           <button
             type="button"
             className="mobile-nav-backdrop"
@@ -55,9 +60,9 @@ export function AppLayout() {
           className={cn(
             'layout-main transition-all duration-300',
             !headerKpisVisible && 'layout-main-no-kpi',
-            isMobile
+            usesDrawerNav
               ? 'layout-main-mobile'
-              : sidebarCollapsed
+              : sidebarCollapsed || isTablet
                 ? 'layout-main-collapsed'
                 : 'layout-main-expanded',
           )}

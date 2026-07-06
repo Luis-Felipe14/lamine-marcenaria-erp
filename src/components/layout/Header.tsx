@@ -10,13 +10,16 @@ import { useUIStore } from '@/stores/uiStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useAuth } from '@/hooks/useAuth'
 import { useBreadcrumb } from '@/hooks/useBreadcrumb'
-import { useIsMobile } from '@/hooks/useIsMobile'
+import { useHeaderHeightSync } from '@/hooks/useHeaderHeightSync'
+import { useViewport } from '@/hooks/useViewport'
 import { useHeaderMetrics, useNotifications } from '@/hooks/useQueries'
 import { cn, formatCurrency } from '@/lib/utils'
 
 export function Header() {
   const { sidebarCollapsed, theme, toggleTheme, setHeaderKpisVisible, setCommandPaletteOpen, toggleMobileNav } = useUIStore()
-  const isMobile = useIsMobile()
+  const { isPhone, isTablet } = useViewport()
+  const headerRef = useRef<HTMLElement>(null)
+  useHeaderHeightSync(headerRef)
   const profile = useAuthStore((s) => s.profile)
   const { signOut } = useAuth()
   const navigate = useNavigate()
@@ -60,9 +63,14 @@ export function Header() {
 
   return (
     <header
+      ref={headerRef}
       className={cn(
         'fixed top-0 right-0 z-50 flex flex-col glass-panel app-header transition-all duration-300',
-        isMobile ? 'header-offset-mobile' : sidebarCollapsed ? 'header-offset-collapsed' : 'header-offset-expanded',
+        isPhone
+          ? 'header-offset-mobile'
+          : isTablet || sidebarCollapsed
+            ? 'header-offset-collapsed'
+            : 'header-offset-expanded',
       )}
     >
       <div className={cn(
@@ -93,11 +101,11 @@ export function Header() {
 
       <div className={cn(
         'flex shrink-0 items-center gap-2 px-3 sm:gap-4 sm:px-4 lg:px-6',
-        isMobile ? 'h-auto min-h-14 flex-col py-2' : 'h-14 justify-between gap-3',
+        isPhone ? 'h-auto min-h-14 flex-col py-2' : 'h-14 justify-between gap-3',
       )}>
-        {isMobile ? (
+        {isPhone ? (
           <>
-            <div className="flex w-full min-w-0 items-center gap-2">
+            <div className="header-phone-toolbar flex w-full min-w-0 items-center gap-2">
               <Button
                 type="button"
                 variant="ghost"
@@ -112,7 +120,7 @@ export function Header() {
               <button
                 type="button"
                 onClick={() => setCommandPaletteOpen(true)}
-                className="command-trigger flex min-h-9 min-w-0 flex-1 items-center gap-2 border px-3 py-2 text-left"
+                className="header-phone-search command-trigger flex min-h-9 min-w-0 flex-1 items-center gap-2 border px-3 py-2 text-left"
                 aria-label="Buscar"
               >
                 <Search className="h-4 w-4 shrink-0 text-gray-500" />

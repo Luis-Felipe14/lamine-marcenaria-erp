@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SidebarBrandHeader } from './SidebarBrandHeader'
-import { useIsMobile } from '@/hooks/useIsMobile'
+import { useViewport } from '@/hooks/useViewport'
 import { useUIStore } from '@/stores/uiStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useAuth } from '@/hooks/useAuth'
@@ -143,14 +143,14 @@ function NavItemLink({
 
 export function Sidebar() {
   const { sidebarCollapsed, toggleSidebar, mobileNavOpen, setMobileNavOpen } = useUIStore()
-  const isMobile = useIsMobile()
+  const { usesDrawerNav } = useViewport()
   const role = useAuthStore((s) => s.profile?.role?.name) as UserRole | undefined
   const { signOut } = useAuth()
   const { data: badges = {} } = useSidebarBadgesQuery()
 
-  const collapsed = isMobile ? false : sidebarCollapsed
+  const collapsed = usesDrawerNav ? false : sidebarCollapsed
   const closeMobileNav = () => {
-    if (isMobile) setMobileNavOpen(false)
+    if (usesDrawerNav) setMobileNavOpen(false)
   }
 
   const visibleMainGroups = filterVisibleGroups(mainNavGroups, role)
@@ -164,18 +164,18 @@ export function Sidebar() {
       className={cn(
         'sidebar-shell fixed z-40 flex flex-col overflow-hidden transition-all duration-300',
         'top-[var(--sidebar-inset)] bottom-[var(--sidebar-inset)] left-[var(--sidebar-inset)]',
-        isMobile
+        usesDrawerNav
           ? cn('sidebar-mobile w-[min(85vw,var(--sidebar-width))]', mobileNavOpen && 'sidebar-mobile-open')
           : collapsed
             ? 'w-[var(--sidebar-collapsed-width)]'
             : 'w-[var(--sidebar-width)]',
       )}
-      aria-hidden={isMobile && !mobileNavOpen}
+      aria-hidden={usesDrawerNav && !mobileNavOpen}
     >
       <div className="sidebar-shine" aria-hidden="true" />
       <div className={cn('sidebar-header shrink-0', collapsed ? 'px-1.5 pt-1.5' : 'px-2.5 pt-2.5 md:px-3 md:pt-3')}>
-        <div className={cn('flex items-center', collapsed && !isMobile ? 'justify-center' : 'justify-between')}>
-          {isMobile && (
+        <div className={cn('flex items-center', collapsed && !usesDrawerNav ? 'justify-center' : 'justify-between')}>
+          {usesDrawerNav && (
             <button
               type="button"
               onClick={closeMobileNav}
@@ -185,7 +185,7 @@ export function Sidebar() {
               <X className="h-4 w-4" />
             </button>
           )}
-          {!isMobile && (
+          {!usesDrawerNav && (
             <button
               type="button"
               onClick={toggleSidebar}
@@ -200,7 +200,7 @@ export function Sidebar() {
           )}
         </div>
 
-        <SidebarBrandHeader collapsed={collapsed && !isMobile} />
+        <SidebarBrandHeader collapsed={collapsed && !usesDrawerNav} />
       </div>
 
       <nav className="flex min-h-0 flex-1 flex-col overflow-y-auto px-1.5 pb-2.5">

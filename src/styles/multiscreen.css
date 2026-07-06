@@ -1,0 +1,218 @@
+/**
+ * Multitelas — adaptação para smartphones, tablets e desktops.
+ * Safe areas (notch, Dynamic Island, home indicator) e breakpoints por tier.
+ */
+
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --header-shell-height: 3.5rem;
+  --header-measured-height: var(--header-shell-height);
+  --header-offset-top: calc(var(--header-measured-height) + var(--safe-top));
+}
+
+.app-shell {
+  min-height: 100dvh;
+  min-height: 100vh;
+  padding-bottom: var(--safe-bottom);
+}
+
+/* ── Header: respeita notch / status bar em PWA iOS ── */
+.app-header {
+  padding-top: var(--safe-top);
+  padding-left: max(var(--sidebar-inset), var(--safe-left));
+  padding-right: max(var(--sidebar-inset), var(--safe-right));
+}
+
+.layout-main,
+.layout-main-mobile,
+.layout-main-collapsed,
+.layout-main-expanded {
+  padding-top: calc(var(--header-offset-top) + 0.5rem);
+  padding-left: max(0.625rem, var(--safe-left));
+  padding-right: max(0.625rem, var(--safe-right));
+  padding-bottom: max(0.875rem, var(--safe-bottom));
+}
+
+.layout-main-no-kpi {
+  padding-top: calc(var(--header-offset-top) + 0.5rem);
+}
+
+@media (min-width: 768px) {
+  .layout-main:not(.layout-main-no-kpi) {
+    padding-top: calc(var(--header-offset-top) + var(--header-kpi-height, 0px) + 0.75rem);
+  }
+
+  .layout-main-collapsed,
+  .layout-main-expanded {
+    padding-left: max(1.5rem, var(--safe-left));
+    padding-right: max(1.5rem, var(--safe-right));
+  }
+}
+
+/* ── Phone (< 768px): drawer, header compacto ── */
+@media (max-width: 767px) {
+  :root {
+    --header-shell-height: 4.25rem;
+    --sidebar-inset: 0.375rem;
+  }
+
+  .sidebar-shell.sidebar-mobile {
+    z-index: 55;
+    top: calc(var(--sidebar-inset) + var(--safe-top));
+    bottom: calc(var(--sidebar-inset) + var(--safe-bottom));
+    left: calc(var(--sidebar-inset) + var(--safe-left));
+    transform: translateX(calc(-100% - var(--sidebar-inset) - var(--safe-left)));
+    box-shadow: 0 0 0 0 transparent;
+  }
+
+  .sidebar-shell.sidebar-mobile.sidebar-mobile-open {
+    transform: translateX(0);
+    box-shadow: 8px 0 32px rgba(0, 0, 0, 0.45);
+  }
+
+  .mobile-nav-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 45;
+    border: none;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(2px);
+    cursor: pointer;
+    animation: fade-in 0.2s ease-out;
+    padding-top: var(--safe-top);
+    padding-bottom: var(--safe-bottom);
+  }
+
+  .layout-main-mobile,
+  .layout-main-collapsed,
+  .layout-main-expanded {
+    margin-left: 0;
+  }
+
+  .header-offset-mobile,
+  .header-offset-collapsed,
+  .header-offset-expanded {
+    left: 0;
+    right: 0;
+  }
+
+  .app-header {
+    margin-left: 0;
+    margin-right: 0;
+    border-bottom-left-radius: 1rem;
+    border-bottom-right-radius: 1rem;
+  }
+
+  .page-content,
+  .dashboard-zone {
+    gap: 0.75rem;
+  }
+
+  .page-zone-label {
+    margin-bottom: 0.375rem;
+    font-size: 0.625rem;
+  }
+
+  .premium-card > .p-6,
+  .premium-card > .p-4 {
+    padding: 0.75rem !important;
+  }
+
+  .card-value {
+    font-size: 1.25rem;
+  }
+
+  .card-value-hero {
+    font-size: 1.375rem;
+  }
+
+  .summary-list-row {
+    padding: 0.5rem 0.75rem;
+    gap: 0.5rem;
+  }
+
+  .summary-list-row .text-sm {
+    font-size: 0.75rem;
+  }
+
+  .stat-grid-mobile-tight {
+    gap: 0.625rem;
+  }
+
+  .sidebar-shell {
+    border-radius: 18px !important;
+  }
+
+  .sidebar-nav-item {
+    min-height: 2.5rem;
+    padding: 0.625rem 0.75rem !important;
+    font-size: 0.8125rem;
+  }
+
+  .pwa-install-banner {
+    pointer-events: none;
+  }
+
+  .pwa-install-banner > * {
+    pointer-events: auto;
+  }
+}
+
+/* Telas muito estreitas (iPhone SE, mini) */
+@media (max-width: 374px) {
+  :root {
+    --header-shell-height: 3.75rem;
+  }
+
+  .header-phone-toolbar {
+    gap: 0.375rem;
+  }
+
+  .header-phone-search {
+    padding-left: 0.625rem !important;
+    padding-right: 0.625rem !important;
+  }
+
+  .header-phone-search span {
+    font-size: 0.75rem;
+  }
+}
+
+/* ── Tablet (768px – 1023px): sidebar recolhida, layout desktop leve ── */
+@media (min-width: 768px) and (max-width: 1023px) {
+  :root {
+    --sidebar-inset: 0.4375rem;
+  }
+
+  .layout-main-collapsed,
+  .layout-main-expanded {
+    margin-left: var(--sidebar-gutter-collapsed);
+  }
+
+  .header-offset-collapsed,
+  .header-offset-expanded {
+    left: var(--sidebar-gutter-collapsed);
+  }
+
+  .sidebar-shell:not(.sidebar-mobile) {
+    width: var(--sidebar-collapsed-width) !important;
+  }
+}
+
+/* ── Desktop (>= 1024px): layout completo ── */
+@media (min-width: 1024px) {
+  .layout-main {
+    padding-left: max(1.5rem, var(--safe-left));
+    padding-right: max(1.5rem, var(--safe-right));
+  }
+}
+
+/* PWA standalone — garante safe area mesmo fora de media queries */
+@media (display-mode: standalone) {
+  .app-header {
+    padding-top: max(var(--safe-top), 0.25rem);
+  }
+}

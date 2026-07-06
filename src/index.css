@@ -2,7 +2,7 @@
 @import "tailwindcss";
 @import "./styles/app-background.css";
 @import "./styles/premium-ui.css";
-@import "./styles/mobile.css";
+@import "./styles/multiscreen.css";
 
 @custom-variant light (&:where(.light, .light *));
 
@@ -123,30 +123,8 @@
 
 @layer utilities {
   .layout-main {
-    padding-top: calc(var(--header-height) + 1.25rem);
-    padding-left: 1rem;
-    padding-right: 1rem;
-    padding-bottom: 1.5rem;
     position: relative;
     z-index: 1;
-  }
-
-  @media (min-width: 768px) {
-    .layout-main {
-      padding-top: calc(var(--header-height) + var(--header-kpi-height) + 1.5rem);
-      padding-left: 1.5rem;
-      padding-right: 1.5rem;
-    }
-  }
-
-  .layout-main-no-kpi {
-    padding-top: calc(var(--header-height) + 1.25rem);
-  }
-
-  @media (min-width: 768px) {
-    .layout-main-no-kpi {
-      padding-top: calc(var(--header-height) + 1.5rem);
-    }
   }
 
   .layout-main-collapsed { margin-left: var(--sidebar-gutter-collapsed); }
