@@ -1,8 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
 
-const DISMISS_KEY = 'lamine-pwa-install-dismissed'
-const DISMISS_MS = 14 * 24 * 60 * 60 * 1000
-
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
@@ -20,20 +17,13 @@ function isIosDevice() {
   return /iphone|ipad|ipod/i.test(navigator.userAgent)
 }
 
-function isDismissedRecently() {
-  const raw = localStorage.getItem(DISMISS_KEY)
-  if (!raw) return false
-  const dismissedAt = Number(raw)
-  return Number.isFinite(dismissedAt) && Date.now() - dismissedAt < DISMISS_MS
-}
-
 export function usePwaInstall() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
   const [visible, setVisible] = useState(false)
   const [isIos, setIsIos] = useState(false)
 
   useEffect(() => {
-    if (isStandaloneMode() || isDismissedRecently()) return
+    if (isStandaloneMode()) return
 
     const ios = isIosDevice()
     setIsIos(ios)
@@ -54,7 +44,6 @@ export function usePwaInstall() {
   }, [])
 
   const dismiss = useCallback(() => {
-    localStorage.setItem(DISMISS_KEY, String(Date.now()))
     setVisible(false)
   }, [])
 
