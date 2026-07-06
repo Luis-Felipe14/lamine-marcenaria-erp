@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { resolveLoginEmail } from '@/lib/auth-username'
 import {
   BillingAccessDeniedError,
@@ -149,10 +149,10 @@ export function useAuth() {
     }
   }
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     await supabase.auth.signOut()
     reset()
-  }
+  }, [reset])
 
   return { user, profile, loading, billingBlockMessage, signIn, signOut }
 }

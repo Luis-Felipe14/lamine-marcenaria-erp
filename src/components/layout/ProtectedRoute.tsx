@@ -12,14 +12,16 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, profile, loading, signOut } = useAuth()
   const setBillingBlockMessage = useAuthStore((s) => s.setBillingBlockMessage)
   const [billingAccess, setBillingAccess] = useState<BillingAccessState>('pending')
+  const profileId = profile?.id
+  const systemAdmin = isSystemAdminProfile(profile)
 
   useEffect(() => {
-    if (!profile) {
+    if (!profileId) {
       setBillingAccess('pending')
       return
     }
 
-    if (isSystemAdminProfile(profile)) {
+    if (systemAdmin) {
       setBillingAccess('allowed')
       return
     }
@@ -27,7 +29,6 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     let cancelled = false
 
     const verifyBillingAccess = async () => {
-      setBillingAccess('pending')
       try {
         const status = await fetchSystemBillingStatus()
         if (cancelled) return
@@ -45,6 +46,7 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
       }
     }
 
+    setBillingAccess('pending')
     void verifyBillingAccess()
     window.addEventListener('focus', verifyBillingAccess)
 
@@ -52,10 +54,10 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
       cancelled = true
       window.removeEventListener('focus', verifyBillingAccess)
     }
-  }, [profile, signOut, setBillingBlockMessage])
+  }, [profileId, systemAdmin, signOut, setBillingBlockMessage])
 
   const waitingBillingCheck =
-    profile != null && !isSystemAdminProfile(profile) && billingAccess === 'pending'
+    profileId != null && !systemAdmin && billingAccess === 'pending'
 
   if (loading || waitingBillingCheck) {
     return (
