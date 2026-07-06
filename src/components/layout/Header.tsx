@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import {
-  Search, Bell, Moon, Sun, LogOut,
+  Search, Bell, Moon, Sun, LogOut, Menu,
   TrendingUp, Package, Wallet, AlertTriangle, ChevronRight,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -10,11 +10,13 @@ import { useUIStore } from '@/stores/uiStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useAuth } from '@/hooks/useAuth'
 import { useBreadcrumb } from '@/hooks/useBreadcrumb'
+import { useIsMobile } from '@/hooks/useIsMobile'
 import { useHeaderMetrics, useNotifications } from '@/hooks/useQueries'
 import { cn, formatCurrency } from '@/lib/utils'
 
 export function Header() {
-  const { sidebarCollapsed, theme, toggleTheme, setHeaderKpisVisible, setCommandPaletteOpen } = useUIStore()
+  const { sidebarCollapsed, theme, toggleTheme, setHeaderKpisVisible, setCommandPaletteOpen, toggleMobileNav } = useUIStore()
+  const isMobile = useIsMobile()
   const profile = useAuthStore((s) => s.profile)
   const { signOut } = useAuth()
   const navigate = useNavigate()
@@ -60,7 +62,7 @@ export function Header() {
     <header
       className={cn(
         'fixed top-0 right-0 z-50 flex flex-col glass-panel app-header transition-all duration-300',
-        sidebarCollapsed ? 'header-offset-collapsed' : 'header-offset-expanded'
+        isMobile ? 'header-offset-mobile' : sidebarCollapsed ? 'header-offset-collapsed' : 'header-offset-expanded',
       )}
     >
       <div className={cn(
@@ -90,7 +92,19 @@ export function Header() {
       </div>
 
       <div className="flex h-14 shrink-0 items-center justify-between gap-3 px-4 sm:gap-4 lg:px-6">
-        <div className="flex min-w-0 flex-1 items-center gap-4">
+        <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-4">
+          {isMobile && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="header-icon-btn h-9 w-9 shrink-0"
+              onClick={toggleMobileNav}
+              aria-label="Abrir menu"
+            >
+              <Menu className="h-5 w-5" />
+            </Button>
+          )}
           <nav className="hidden min-w-0 items-center gap-1 sm:flex" aria-label="Breadcrumb">
             <span className="breadcrumb-item">Laminê</span>
             {labels.map((label, i) => (

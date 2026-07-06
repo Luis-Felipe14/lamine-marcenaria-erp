@@ -15,6 +15,7 @@ export type WidgetId = (typeof DEFAULT_WIDGET_ORDER)[number]
 
 interface UIState {
   sidebarCollapsed: boolean
+  mobileNavOpen: boolean
   theme: 'dark' | 'light'
   headerKpisVisible: boolean
   commandPaletteOpen: boolean
@@ -23,6 +24,8 @@ interface UIState {
   dashboardWidgetOrder: WidgetId[]
   toggleSidebar: () => void
   setSidebarCollapsed: (collapsed: boolean) => void
+  setMobileNavOpen: (open: boolean) => void
+  toggleMobileNav: () => void
   setTheme: (theme: 'dark' | 'light') => void
   toggleTheme: () => void
   setHeaderKpisVisible: (visible: boolean) => void
@@ -37,6 +40,7 @@ export const useUIStore = create<UIState>()(
   persist(
     (set) => ({
       sidebarCollapsed: false,
+      mobileNavOpen: false,
       theme: 'dark',
       headerKpisVisible: false,
       commandPaletteOpen: false,
@@ -60,6 +64,8 @@ export const useUIStore = create<UIState>()(
         }),
       toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
       setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
+      setMobileNavOpen: (open) => set({ mobileNavOpen: open }),
+      toggleMobileNav: () => set((s) => ({ mobileNavOpen: !s.mobileNavOpen })),
       setTheme: (theme) => {
         document.documentElement.classList.toggle('light', theme === 'light')
         set({ theme })

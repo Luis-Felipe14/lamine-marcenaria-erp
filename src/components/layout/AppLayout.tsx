@@ -5,20 +5,31 @@ import { Sidebar } from './Sidebar'
 import { Header } from './Header'
 import { PageTransition } from './PageTransition'
 import { CommandPalette } from '@/components/shared/CommandPalette'
+import { useIsMobile } from '@/hooks/useIsMobile'
 import { useUIStore } from '@/stores/uiStore'
 import { cn } from '@/lib/utils'
 
 export function AppLayout() {
   const sidebarCollapsed = useUIStore((s) => s.sidebarCollapsed)
-  const setSidebarCollapsed = useUIStore((s) => s.setSidebarCollapsed)
+  const mobileNavOpen = useUIStore((s) => s.mobileNavOpen)
+  const setMobileNavOpen = useUIStore((s) => s.setMobileNavOpen)
   const headerKpisVisible = useUIStore((s) => s.headerKpisVisible)
   const addRecentPage = useUIStore((s) => s.addRecentPage)
   const location = useLocation()
+  const isMobile = useIsMobile()
 
   useEffect(() => {
-    const mq = window.matchMedia('(max-width: 767px)')
-    if (mq.matches) setSidebarCollapsed(true)
-  }, [setSidebarCollapsed])
+    setMobileNavOpen(false)
+  }, [location.pathname, setMobileNavOpen])
+
+  useEffect(() => {
+    if (!isMobile || !mobileNavOpen) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [isMobile, mobileNavOpen])
 
   useEffect(() => {
     addRecentPage(location.pathname)
@@ -29,13 +40,25 @@ export function AppLayout() {
       <AppBackground />
       <div className="app-shell">
         <CommandPalette />
+        {isMobile && mobileNavOpen && (
+          <button
+            type="button"
+            className="mobile-nav-backdrop"
+            aria-label="Fechar menu"
+            onClick={() => setMobileNavOpen(false)}
+          />
+        )}
         <Sidebar />
         <Header />
         <main
           className={cn(
             'layout-main transition-all duration-300',
             !headerKpisVisible && 'layout-main-no-kpi',
-            sidebarCollapsed ? 'layout-main-collapsed' : 'layout-main-expanded'
+            isMobile
+              ? 'layout-main-mobile'
+              : sidebarCollapsed
+                ? 'layout-main-collapsed'
+                : 'layout-main-expanded',
           )}
         >
           <PageTransition />

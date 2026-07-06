@@ -2,10 +2,11 @@ import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Users, Target, FileText, Package, Factory,
   Warehouse, ShoppingCart, DollarSign, Megaphone, UserCog,
-  MessageSquare, BarChart3, Settings, Menu, LogOut, CreditCard, ClipboardList,
+  MessageSquare, BarChart3, Settings, Menu, LogOut, CreditCard, ClipboardList, X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SidebarBrandHeader } from './SidebarBrandHeader'
+import { useIsMobile } from '@/hooks/useIsMobile'
 import { useUIStore } from '@/stores/uiStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useAuth } from '@/hooks/useAuth'
@@ -96,10 +97,12 @@ function NavItemLink({
   item,
   collapsed,
   badge,
+  onNavigate,
 }: {
   item: NavItem
   collapsed: boolean
   badge?: number
+  onNavigate?: () => void
 }) {
   const showBadge = badge !== undefined && badge > 0
 
@@ -108,6 +111,7 @@ function NavItemLink({
       to={item.to}
       end={item.to === '/'}
       title={collapsed ? item.label : undefined}
+      onClick={onNavigate}
       className={({ isActive }) =>
         cn(
           'sidebar-nav-item',
@@ -138,10 +142,16 @@ function NavItemLink({
 }
 
 export function Sidebar() {
-  const { sidebarCollapsed, toggleSidebar } = useUIStore()
+  const { sidebarCollapsed, toggleSidebar, mobileNavOpen, setMobileNavOpen } = useUIStore()
+  const isMobile = useIsMobile()
   const role = useAuthStore((s) => s.profile?.role?.name) as UserRole | undefined
   const { signOut } = useAuth()
   const { data: badges = {} } = useSidebarBadgesQuery()
+
+  const collapsed = isMobile ? false : sidebarCollapsed
+  const closeMobileNav = () => {
+    if (isMobile) setMobileNavOpen(false)
+  }
 
   const visibleMainGroups = filterVisibleGroups(mainNavGroups, role)
   const visibleSystemGroup = {
@@ -154,35 +164,61 @@ export function Sidebar() {
       className={cn(
         'sidebar-shell fixed z-40 flex flex-col overflow-hidden transition-all duration-300',
         'top-[var(--sidebar-inset)] bottom-[var(--sidebar-inset)] left-[var(--sidebar-inset)]',
-        sidebarCollapsed ? 'w-[var(--sidebar-collapsed-width)]' : 'w-[var(--sidebar-width)]'
+        isMobile
+          ? cn('sidebar-mobile w-[min(85vw,var(--sidebar-width))]', mobileNavOpen && 'sidebar-mobile-open')
+          : collapsed
+            ? 'w-[var(--sidebar-collapsed-width)]'
+            : 'w-[var(--sidebar-width)]',
       )}
+      aria-hidden={isMobile && !mobileNavOpen}
     >
       <div className="sidebar-shine" aria-hidden="true" />
-      <div className={cn('sidebar-header shrink-0', sidebarCollapsed ? 'px-1.5 pt-1.5' : 'px-2.5 pt-2.5 md:px-3 md:pt-3')}>
-        <div className={cn('flex items-center', sidebarCollapsed ? 'justify-center' : 'justify-end')}>
-          <button
-            type="button"
-            onClick={toggleSidebar}
-            className="sidebar-toggle flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-white/5 hover:text-gold light:hover:bg-gray-100"
-            aria-label={sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'}
-          >
-            <Menu className="h-4 w-4 md:h-[18px] md:w-[18px]" />
-          </button>
+      <div className={cn('sidebar-header shrink-0', collapsed ? 'px-1.5 pt-1.5' : 'px-2.5 pt-2.5 md:px-3 md:pt-3')}>
+        <div className={cn('flex items-center', collapsed && !isMobile ? 'justify-center' : 'justify-between')}>
+          {isMobile && (
+            <button
+              type="button"
+              onClick={closeMobileNav}
+              className="sidebar-toggle flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-white/5 hover:text-gold light:hover:bg-gray-100"
+              aria-label="Fechar menu"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+          {!isMobile && (
+            <button
+              type="button"
+              onClick={toggleSidebar}
+              className={cn(
+                'sidebar-toggle flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-white/5 hover:text-gold light:hover:bg-gray-100',
+                collapsed ? 'mx-auto' : 'ml-auto',
+              )}
+              aria-label={collapsed ? 'Expandir menu' : 'Recolher menu'}
+            >
+              <Menu className="h-4 w-4 md:h-[18px] md:w-[18px]" />
+            </button>
+          )}
         </div>
 
-        <SidebarBrandHeader collapsed={sidebarCollapsed} />
+        <SidebarBrandHeader collapsed={collapsed && !isMobile} />
       </div>
 
       <nav className="flex min-h-0 flex-1 flex-col overflow-y-auto px-1.5 pb-2.5">
         <div className="space-y-1">
           {visibleMainGroups.map((group) => (
             <div key={group.label}>
-              {!sidebarCollapsed && (
+              {!collapsed && (
                 <p className="nav-group-label">{group.label}</p>
               )}
               <div className="space-y-0.5">
                 {group.items.map((item) => (
-                  <NavItemLink key={item.to} item={item} collapsed={sidebarCollapsed} badge={badges[item.to]} />
+                  <NavItemLink
+                    key={item.to}
+                    item={item}
+                    collapsed={collapsed}
+                    badge={badges[item.to]}
+                    onNavigate={closeMobileNav}
+                  />
                 ))}
               </div>
             </div>
@@ -192,24 +228,32 @@ export function Sidebar() {
         <div className="mt-auto">
           <div className="sidebar-divider" />
           <div>
-            {!sidebarCollapsed && (
+            {!collapsed && (
               <p className="nav-group-label">{visibleSystemGroup.label}</p>
             )}
             <div className="space-y-0.5">
               {visibleSystemGroup.items.map((item) => (
-                <NavItemLink key={item.to} item={item} collapsed={sidebarCollapsed} />
+                <NavItemLink
+                  key={item.to}
+                  item={item}
+                  collapsed={collapsed}
+                  onNavigate={closeMobileNav}
+                />
               ))}
               <button
                 type="button"
-                onClick={() => signOut()}
-                title={sidebarCollapsed ? 'Sair' : undefined}
+                onClick={() => {
+                  closeMobileNav()
+                  void signOut()
+                }}
+                title={collapsed ? 'Sair' : undefined}
                 className={cn(
                   'sidebar-nav-item w-full text-left',
-                  sidebarCollapsed && 'justify-center px-2'
+                  collapsed && 'justify-center px-2'
                 )}
               >
                 <LogOut className="sidebar-nav-icon h-[18px] w-[18px] shrink-0" />
-                {!sidebarCollapsed && <span>Sair</span>}
+                {!collapsed && <span>Sair</span>}
               </button>
             </div>
           </div>

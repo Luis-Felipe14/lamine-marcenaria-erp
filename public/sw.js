@@ -1,4 +1,4 @@
-const CACHE_NAME = 'lamine-erp-v1'
+const CACHE_NAME = 'lamine-erp-v2'
 
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting())
