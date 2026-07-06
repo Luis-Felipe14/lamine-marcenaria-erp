@@ -1,3 +1,4 @@
+import { AuthApiError } from '@supabase/supabase-js'
 import { isSystemAdminProfile } from '@/lib/system-admin'
 import { DEFAULT_BILLING_LOCK_MESSAGE } from '@/lib/system-admin'
 import { fetchSystemBillingStatus } from '@/services/system-billing.service'
@@ -109,9 +110,15 @@ export async function fetchProfile(userId: string): Promise<UserProfile | null> 
   }
 }
 
-export async function loadAuthenticatedProfile(userId: string): Promise<UserProfile | null> {
+export async function loadAuthenticatedProfile(userId: string): Promise<UserProfile> {
   const profile = await fetchProfile(userId)
+  if (!profile) {
+    throw new Error('Perfil não encontrado no sistema. Contate o administrador.')
+  }
   await assertBillingAccess(profile)
+  if (!profile.is_active) {
+    throw new Error('Conta desativada. Entre em contato com o administrador do sistema.')
+  }
   return profile
 }
 
@@ -120,8 +127,28 @@ export async function rejectBlockedSession(message = DEFAULT_BILLING_LOCK_MESSAG
   throw new BillingAccessDeniedError(message)
 }
 
-export function getBillingDeniedMessage(error: unknown): string {
+export function formatLoginError(error: unknown): string {
   if (error instanceof BillingAccessDeniedError) return error.message
+  if (error instanceof AuthApiError) {
+    if (
+      error.message === 'Invalid login credentials' ||
+      error.code === 'invalid_credentials' ||
+      error.status === 400
+    ) {
+      if (error.message && error.message !== 'Invalid login credentials') {
+        return error.message
+      }
+      return 'Usuário ou senha incorretos'
+    }
+    if (error.code === 'email_not_confirmed') {
+      return 'Conta pendente de confirmação. Contate o administrador.'
+    }
+    return error.message || 'Falha na autenticação'
+  }
   if (error instanceof Error && error.message) return error.message
-  return DEFAULT_BILLING_LOCK_MESSAGE
+  return 'Erro ao fazer login'
+}
+
+export function getBillingDeniedMessage(error: unknown): string {
+  return formatLoginError(error)
 }

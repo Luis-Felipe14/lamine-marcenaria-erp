@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { resolveLoginEmail } from '@/lib/auth-username'
 import {
   BillingAccessDeniedError,
-  getBillingDeniedMessage,
+  formatLoginError,
   loadAuthenticatedProfile,
 } from '@/lib/auth-session'
 import { supabase } from '@/lib/supabase'
@@ -96,6 +96,9 @@ export function useAuth() {
           if (error instanceof BillingAccessDeniedError) {
             await clearBlockedSession(error.message, setBillingBlockMessage, clearAuth)
           } else {
+            if (error instanceof Error && error.message) {
+              setBillingBlockMessage(error.message)
+            }
             clearAuth()
           }
         }
@@ -136,8 +139,11 @@ export function useAuth() {
         await supabase.auth.signOut()
         setUser(null)
         setProfile(null)
+        if (error instanceof Error && error.message) {
+          setBillingBlockMessage(error.message)
+        }
       }
-      throw new Error(getBillingDeniedMessage(error))
+      throw error
     } finally {
       signInInProgress.current = false
       setLoading(false)

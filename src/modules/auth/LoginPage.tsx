@@ -5,6 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { AlertCircle, ArrowRight, Loader2, Lock, ShieldAlert, User } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
+import { formatLoginError } from '@/lib/auth-session'
 import { fetchSystemBillingStatus } from '@/services/system-billing.service'
 import { LoginParticles } from './LoginParticles'
 import { LoginSlideshow } from './LoginSlideshow'
@@ -79,8 +80,7 @@ export function LoginPage() {
     try {
       await signIn(data.username.trim(), data.password)
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Erro ao fazer login'
-      setAuthError(message === 'Invalid login credentials' ? 'Usuário ou senha incorretos' : message)
+      setAuthError(formatLoginError(err))
     } finally {
       setLoginLoading(false)
     }

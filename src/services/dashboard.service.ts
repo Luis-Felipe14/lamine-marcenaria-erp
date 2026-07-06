@@ -8,7 +8,7 @@ import { getLumberCreditBalance } from '@/services/lumberyard-credit.service'
 
 const ACTIVE_ORDER_STATUSES = ['projeto_desenvolvimento', 'aguardando_material', 'em_producao', 'pronto_entrega', 'em_montagem']
 
-async function sumFinancialAmount(
+async function sumFinancialAmountFallback(
   type: 'receita' | 'despesa',
   isPaid: boolean,
   dateFrom?: string,
@@ -17,7 +17,7 @@ async function sumFinancialAmount(
 ): Promise<number> {
   let q = supabase
     .from('financial_transactions')
-    .select('amount.sum()')
+    .select('amount')
     .eq('type', type)
     .eq('is_paid', isPaid)
     .is('deleted_at', null)
@@ -25,9 +25,37 @@ async function sumFinancialAmount(
   if (dateTo) q = q.lte('paid_date', dateTo)
   if (dueDateTo) q = q.lte('due_date', dueDateTo)
   const { data, error } = await q
-  if (error) return 0
-  const row = (data as { sum: number | null }[] | null)?.[0]
-  return Number(row?.sum) || 0
+  if (error) {
+    console.warn('[Dashboard] sumFinancialAmount fallback:', error.message)
+    return 0
+  }
+  return (data ?? []).reduce((sum, row) => sum + Number(row.amount), 0)
+}
+
+async function sumFinancialAmount(
+  type: 'receita' | 'despesa',
+  isPaid: boolean,
+  dateFrom?: string,
+  dateTo?: string,
+  dueDateTo?: string
+): Promise<number> {
+  const { data, error } = await supabase.rpc('sum_financial_amount', {
+    p_type: type,
+    p_is_paid: isPaid,
+    p_date_from: dateFrom ?? null,
+    p_date_to: dateTo ?? null,
+    p_due_date_to: dueDateTo ?? null,
+  })
+
+  if (error) {
+    if (error.code === 'PGRST202') {
+      return sumFinancialAmountFallback(type, isPaid, dateFrom, dateTo, dueDateTo)
+    }
+    console.warn('[Dashboard] sumFinancialAmount:', error.message)
+    return 0
+  }
+
+  return Number(data) || 0
 }
 
 export async function countCriticalStock(): Promise<number> {
