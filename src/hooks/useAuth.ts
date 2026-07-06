@@ -2,7 +2,6 @@ import { useEffect, useRef } from 'react'
 import { resolveLoginEmail } from '@/lib/auth-username'
 import {
   BillingAccessDeniedError,
-  formatLoginError,
   loadAuthenticatedProfile,
 } from '@/lib/auth-session'
 import { supabase } from '@/lib/supabase'
