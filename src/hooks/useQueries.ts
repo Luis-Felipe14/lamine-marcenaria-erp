@@ -1,6 +1,8 @@
 import { useMemo } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { hasPermission } from '@/lib/permissions'
 import { queryKeys } from '@/lib/query-keys'
+import { useAuthStore } from '@/stores/authStore'
 import {
   countCriticalStock,
   getExecutiveMetrics,
@@ -68,9 +70,12 @@ export function useCommercialMetrics() {
 }
 
 export function useOperationalMetrics() {
+  const role = useAuthStore((s) => s.profile?.role?.name)
+  const includeLumberCredit = hasPermission(role, 'lumber_credit.read')
+
   return useQuery({
-    queryKey: queryKeys.operationalMetrics,
-    queryFn: getOperationalMetrics,
+    queryKey: [...queryKeys.operationalMetrics, includeLumberCredit],
+    queryFn: () => getOperationalMetrics({ includeLumberCredit }),
   })
 }
 

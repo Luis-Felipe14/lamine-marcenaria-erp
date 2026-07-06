@@ -10,9 +10,15 @@ import { cn } from '@/lib/utils'
 
 export function AppLayout() {
   const sidebarCollapsed = useUIStore((s) => s.sidebarCollapsed)
+  const setSidebarCollapsed = useUIStore((s) => s.setSidebarCollapsed)
   const headerKpisVisible = useUIStore((s) => s.headerKpisVisible)
   const addRecentPage = useUIStore((s) => s.addRecentPage)
   const location = useLocation()
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)')
+    if (mq.matches) setSidebarCollapsed(true)
+  }, [setSidebarCollapsed])
 
   useEffect(() => {
     addRecentPage(location.pathname)

@@ -30,7 +30,7 @@ export function StatGrid({
       className={cn(
         'cascade-stagger grid gap-4 lg:gap-5',
         strip
-          ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'
+          ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 stat-grid-mobile-tight'
           : 'grid-cols-[repeat(auto-fill,minmax(min(100%,11rem),1fr))]',
         className
       )}

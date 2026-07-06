@@ -248,15 +248,16 @@ export async function getCommercialMetrics() {
   }
 }
 
-export async function getOperationalMetrics() {
+export async function getOperationalMetrics(options?: { includeLumberCredit?: boolean }) {
   const today = format(new Date(), 'yyyy-MM-dd')
+  const includeLumberCredit = options?.includeLumberCredit !== false
 
   const [openOrders, inProgress, lateData, pendingDeliveries, lumberCreditBalance] = await Promise.all([
     countQuery('production_orders', (q) => q.eq('status', 'aberta').is('deleted_at', null)),
     countQuery('production_orders', (q) => q.eq('status', 'em_andamento').is('deleted_at', null)),
     supabase.from('production_orders').select('id').lt('expected_end_date', today).neq('status', 'concluida').is('deleted_at', null),
     countQuery('orders', (q) => q.in('status', ['pronto_entrega', 'em_montagem']).is('deleted_at', null)),
-    getLumberCreditBalance().catch(() => 0),
+    includeLumberCredit ? getLumberCreditBalance().catch(() => 0) : Promise.resolve(0),
   ])
 
   throwIfError(lateData.error, 'late production')
