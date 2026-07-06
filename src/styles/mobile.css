@@ -2,7 +2,7 @@
 
 @media (max-width: 767px) {
   :root {
-    --header-height: 3.25rem;
+    --header-height: 4.25rem;
     --sidebar-inset: 0.375rem;
   }
 
@@ -103,5 +103,13 @@
     min-height: 2.5rem;
     padding: 0.625rem 0.75rem !important;
     font-size: 0.8125rem;
+  }
+
+  .pwa-install-banner {
+    pointer-events: none;
+  }
+
+  .pwa-install-banner > * {
+    pointer-events: auto;
   }
 }

@@ -5,6 +5,7 @@ import { Sidebar } from './Sidebar'
 import { Header } from './Header'
 import { PageTransition } from './PageTransition'
 import { CommandPalette } from '@/components/shared/CommandPalette'
+import { PwaInstallBanner } from '@/components/shared/PwaInstallBanner'
 import { useIsMobile } from '@/hooks/useIsMobile'
 import { useUIStore } from '@/stores/uiStore'
 import { cn } from '@/lib/utils'
@@ -63,6 +64,7 @@ export function AppLayout() {
         >
           <PageTransition />
         </main>
+        <PwaInstallBanner />
       </div>
     </>
   )
