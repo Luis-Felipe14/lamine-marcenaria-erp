@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { PageHeader } from '@/components/shared/PageHeader'
@@ -29,6 +30,7 @@ import {
   type MaterialCategoryUsageType,
 } from '@/services/material-categories.service'
 import { useMaterialCategories, useInvalidateMaterialCategories } from '@/hooks/useMaterialCategories'
+import { saveLumberCreditSettings } from '@/services/lumberyard-credit.service'
 import { useAuthStore } from '@/stores/authStore'
 import { useConfirm } from '@/hooks/useConfirm'
 import type { UserRole } from '@/types'
@@ -59,6 +61,7 @@ interface RoleOption {
 }
 
 export function SettingsPage() {
+  const queryClient = useQueryClient()
   const { confirm, dialogProps: confirmDialogProps } = useConfirm()
   const currentRole = useAuthStore((s) => s.profile?.role?.name)
   const currentProfile = useAuthStore((s) => s.profile)
@@ -74,6 +77,7 @@ export function SettingsPage() {
   const [roleOptions, setRoleOptions] = useState<RoleOption[]>([])
   const [monthlyGoal, setMonthlyGoal] = useState(50000)
   const [goalEnabled, setGoalEnabled] = useState(false)
+  const [allowCrossClientCredit, setAllowCrossClientCredit] = useState(false)
   const [loading, setLoading] = useState(true)
   const [savingUserId, setSavingUserId] = useState<string | null>(null)
   const [passwordDrafts, setPasswordDrafts] = useState<Record<string, string>>({})
@@ -120,9 +124,10 @@ export function SettingsPage() {
 
   useEffect(() => {
     async function load() {
-      const [{ data: settings }, { data: goals }] = await Promise.all([
+      const [{ data: settings }, { data: goals }, { data: lumberCredit }] = await Promise.all([
         supabase.from('settings').select('*').eq('key', 'company').single(),
         supabase.from('settings').select('*').eq('key', 'goals').maybeSingle(),
+        supabase.from('settings').select('*').eq('key', 'lumber_credit').maybeSingle(),
       ])
       if (settings?.value) setCompany(settings.value as CompanySettings)
       const goalsVal = goals?.value as {
@@ -131,6 +136,9 @@ export function SettingsPage() {
       } | undefined
       if (goalsVal?.monthly_revenue_goal) setMonthlyGoal(goalsVal.monthly_revenue_goal)
       setGoalEnabled(goalsVal?.monthly_goal_enabled ?? Boolean(goalsVal?.monthly_revenue_goal))
+
+      const lumberVal = lumberCredit?.value as { allow_cross_client?: boolean } | undefined
+      setAllowCrossClientCredit(lumberVal?.allow_cross_client ?? false)
 
       await loadUsers()
       setLoading(false)
@@ -155,6 +163,16 @@ export function SettingsPage() {
       : await supabase.from('settings').insert(payload)
     if (error) toast.error(error.message)
     else toast.success('Meta mensal atualizada!')
+  }
+
+  const saveLumberCredit = async () => {
+    try {
+      await saveLumberCreditSettings({ allow_cross_client: allowCrossClientCredit })
+      await queryClient.invalidateQueries({ queryKey: ['lumber-credit'] })
+      toast.success('Configurações do crédito madereira salvas!')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao salvar configurações')
+    }
   }
 
   const updateUserRole = async (userId: string, roleId: string) => {
@@ -306,6 +324,7 @@ export function SettingsPage() {
         <TabsList className="mb-6">
           <TabsTrigger value="company">Empresa</TabsTrigger>
           <TabsTrigger value="goals">Metas</TabsTrigger>
+          {canEditCategories && <TabsTrigger value="lumber-credit">Crédito madereira</TabsTrigger>}
           <TabsTrigger value="owners">Proprietários</TabsTrigger>
           <TabsTrigger value="users">Usuários</TabsTrigger>
           <TabsTrigger value="categories">Perfis</TabsTrigger>
@@ -373,6 +392,35 @@ export function SettingsPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {canEditCategories && (
+          <TabsContent value="lumber-credit">
+            <Card>
+              <CardHeader><CardTitle>Crédito da madereira</CardTitle></CardHeader>
+              <CardContent className="space-y-5 max-w-lg">
+                <div className="flex items-center justify-between gap-4 rounded-lg border border-border/60 bg-surface-elevated px-4 py-3">
+                  <div className="min-w-0 flex-1">
+                    <Label htmlFor="lumber-cross-client" className="text-sm font-medium text-white light:text-gray-900">
+                      Permitir uso entre clientes
+                    </Label>
+                    <p className="mt-0.5 text-xs text-gray-500">
+                      {allowCrossClientCredit
+                        ? 'ON — saídas podem consumir crédito de qualquer cliente'
+                        : 'OFF — cada saída usa apenas o saldo do cliente selecionado'}
+                    </p>
+                  </div>
+                  <Switch
+                    id="lumber-cross-client"
+                    checked={allowCrossClientCredit}
+                    onCheckedChange={setAllowCrossClientCredit}
+                    aria-label="Permitir crédito entre clientes"
+                  />
+                </div>
+                <Button onClick={() => void saveLumberCredit()}>Salvar configurações</Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
 
         <TabsContent value="owners" className="space-y-4">
           <OwnersSection canEdit={canEditUsers} />

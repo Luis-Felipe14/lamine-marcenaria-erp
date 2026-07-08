@@ -18,6 +18,8 @@ const OrdersPage = lazy(() => import('@/modules/orders/OrdersPage').then((m) => 
 const ProductionPage = lazy(() => import('@/modules/production/ProductionPage').then((m) => ({ default: m.ProductionPage })))
 const InventoryPage = lazy(() => import('@/modules/inventory/InventoryPage').then((m) => ({ default: m.InventoryPage })))
 const PurchasesPage = lazy(() => import('@/modules/purchases/PurchasesPage').then((m) => ({ default: m.PurchasesPage })))
+const SuppliersPage = lazy(() => import('@/modules/suppliers/SuppliersPage').then((m) => ({ default: m.SuppliersPage })))
+const ArchitectsPage = lazy(() => import('@/modules/architects/ArchitectsPage').then((m) => ({ default: m.ArchitectsPage })))
 const FinancialPage = lazy(() => import('@/modules/financial/FinancialPage').then((m) => ({ default: m.FinancialPage })))
 const MarketingPage = lazy(() => import('@/modules/marketing/MarketingPage').then((m) => ({ default: m.MarketingPage })))
 const LumberyardCreditPage = lazy(() => import('@/modules/lumberyard-credit/LumberyardCreditPage').then((m) => ({ default: m.LumberyardCreditPage })))
@@ -26,6 +28,7 @@ const PayrollPage = lazy(() => import('@/modules/payroll/PayrollPage').then((m) 
 const RequestsPage = lazy(() => import('@/modules/requests/RequestsPage').then((m) => ({ default: m.RequestsPage })))
 const ReportsPage = lazy(() => import('@/modules/reports/ReportsPage').then((m) => ({ default: m.ReportsPage })))
 const SettingsPage = lazy(() => import('@/modules/settings/SettingsPage').then((m) => ({ default: m.SettingsPage })))
+const BudgetPdfRenderPage = lazy(() => import('@/pages/BudgetPdfRenderPage').then((m) => ({ default: m.BudgetPdfRenderPage })))
 
 function PageLoader() {
   return (
@@ -51,6 +54,16 @@ export function AppRoutes() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/login/redefinir-senha" element={<ResetPasswordPage />} />
           <Route
+            path="/internal/pdf/orcamento/:budgetId"
+            element={
+              <ProtectedRoute>
+                <Guarded permission="budgets.read">
+                  <BudgetPdfRenderPage />
+                </Guarded>
+              </ProtectedRoute>
+            }
+          />
+          <Route
             element={
               <ProtectedRoute>
                 <AppLayout />
@@ -65,11 +78,13 @@ export function AppRoutes() {
             </Route>
             <Route path="crm" element={<Guarded permission="crm.read"><CrmPage /></Guarded>} />
             <Route path="clientes" element={<Guarded permission="clients.read"><ClientsPage /></Guarded>} />
+            <Route path="arquitetos" element={<Guarded permission="clients.read"><ArchitectsPage /></Guarded>} />
             <Route path="orcamentos" element={<Guarded permission="budgets.read"><BudgetsPage /></Guarded>} />
             <Route path="pedidos" element={<Guarded permission="orders.read"><OrdersPage /></Guarded>} />
             <Route path="producao" element={<Guarded permission="production.read"><ProductionPage /></Guarded>} />
             <Route path="estoque" element={<Guarded permission="inventory.read"><InventoryPage /></Guarded>} />
             <Route path="compras" element={<Guarded permission="purchases.read"><PurchasesPage /></Guarded>} />
+            <Route path="fornecedores" element={<Guarded permission="purchases.read"><SuppliersPage /></Guarded>} />
             <Route path="credito-madereira" element={<Guarded permission="lumber_credit.read"><LumberyardCreditPage /></Guarded>} />
             <Route path="financeiro" element={<Guarded permission="financial.read"><FinancialPage /></Guarded>} />
             <Route path="marketing" element={<Guarded permission="marketing.read"><MarketingPage /></Guarded>} />

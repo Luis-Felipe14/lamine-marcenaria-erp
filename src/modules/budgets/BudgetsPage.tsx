@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { Plus, FileDown, Trash2, Package, Pencil, X, Loader2 } from 'lucide-react'
+import { Plus, FileDown, Trash2, Pencil, X, Loader2, Layers, ImagePlus } from 'lucide-react'
 import { toast } from 'sonner'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { PageContent, PageDataZone } from '@/components/shared/PageLayout'
@@ -20,41 +20,84 @@ import { supabase } from '@/lib/supabase'
 import { BUDGET_STATUSES, getBudgetStatusLabel } from '@/lib/constants'
 import { formatCurrency } from '@/lib/utils'
 import { createRecord, updateRecord, softDelete } from '@/services/api'
-import { exportBudgetPDF, type BudgetPdfDetailLevel } from '@/lib/export'
+import { downloadBudgetProposalPdf } from '@/services/budget-pdf.service'
+import {
+  uploadBudgetEnvironmentImage,
+  validateBudgetEnvironmentImage,
+} from '@/services/budget-environment-images.service'
+import {
+  DEFAULT_COMMERCIAL_TERMS,
+  DEFAULT_ENTRADA_PERCENT,
+  DEFAULT_INSTALLATION_TIMELINE,
+  DEFAULT_MANUFACTURING_TIMELINE,
+} from '@/pdf/defaults'
 import { useConfirm } from '@/hooks/useConfirm'
 import { useBudgets, useLookupClients } from '@/hooks/useQueries'
 import type { Budget } from '@/services/budgets.service'
-import { MaterialPickerDialog } from '@/components/budgets/MaterialPickerDialog'
-import type { BudgetMaterialOption } from '@/services/lookups.service'
 
 interface BudgetItemForm {
   description: string
-  material: string
-  material_id: string | null
+  specifications: string
   quantity: number
   unit_price: number
 }
 
+interface BudgetEnvironmentForm {
+  id?: string
+  name: string
+  description: string
+  image_url: string | null
+  imageFile: File | null
+  imagePreview: string | null
+  items: BudgetItemForm[]
+}
+
 const emptyItem = (): BudgetItemForm => ({
   description: '',
-  material: '',
-  material_id: null,
+  specifications: '',
   quantity: 1,
   unit_price: 0,
 })
 
-const BUDGET_LOCKED_STATUSES = ['convertido_pedido', 'aprovado'] as const
+const emptyEnvironment = (name = 'Sala'): BudgetEnvironmentForm => ({
+  name,
+  description: '',
+  image_url: null,
+  imageFile: null,
+  imagePreview: null,
+  items: [emptyItem()],
+})
 
 const emptyForm = () => ({
   client_id: '',
   project_name: '',
-  environment: '',
   measurements: '',
-  labor_cost: 0,
   discount: 0,
   notes: '',
-  items: [emptyItem()],
+  commercial_terms: DEFAULT_COMMERCIAL_TERMS,
+  entrada_percent: DEFAULT_ENTRADA_PERCENT,
+  manufacturing_timeline: DEFAULT_MANUFACTURING_TIMELINE,
+  installation_timeline: DEFAULT_INSTALLATION_TIMELINE,
+  environments: [emptyEnvironment()],
 })
+
+const BUDGET_LOCKED_STATUSES = ['convertido_pedido', 'aprovado'] as const
+
+function environmentSellingTotal(env: BudgetEnvironmentForm) {
+  return env.items.reduce((sum, item) => sum + item.quantity * item.unit_price, 0)
+}
+
+function projectSellingTotal(environments: BudgetEnvironmentForm[]) {
+  return environments.reduce((sum, env) => sum + environmentSellingTotal(env), 0)
+}
+
+function flattenValidItems(environments: BudgetEnvironmentForm[]) {
+  return environments.flatMap((env) =>
+    env.items
+      .filter((item) => item.description.trim())
+      .map((item) => ({ env, item })),
+  )
+}
 
 export function BudgetsPage() {
   const queryClient = useQueryClient()
@@ -69,11 +112,9 @@ export function BudgetsPage() {
   const [editing, setEditing] = useState<Budget | null>(null)
   const [formLoading, setFormLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [materialPickerIndex, setMaterialPickerIndex] = useState<number | null>(null)
   const [form, setForm] = useState(emptyForm)
   const [pdfDialogOpen, setPdfDialogOpen] = useState(false)
   const [pdfBudget, setPdfBudget] = useState<Budget | null>(null)
-  const [pdfDetailLevel, setPdfDetailLevel] = useState<BudgetPdfDetailLevel>('materiais')
   const [pdfExporting, setPdfExporting] = useState(false)
 
   const refreshBudgets = useCallback(() => {
@@ -89,10 +130,7 @@ export function BudgetsPage() {
     }
   }, [searchParams])
 
-  const calculateTotal = () => {
-    const itemsTotal = form.items.reduce((s, i) => s + i.quantity * i.unit_price, 0)
-    return itemsTotal + form.labor_cost - form.discount
-  }
+  const calculateTotal = () => projectSellingTotal(form.environments) - form.discount
 
   const isBudgetLocked = (status: string) =>
     (BUDGET_LOCKED_STATUSES as readonly string[]).includes(status)
@@ -112,38 +150,84 @@ export function BudgetsPage() {
     setDialogOpen(true)
     setFormLoading(true)
     try {
-      const [{ data: full, error: budgetError }, { data: items, error: itemsError }] = await Promise.all([
+      const [{ data: full, error: budgetError }, { data: environments, error: envError }, { data: items, error: itemsError }] = await Promise.all([
         supabase.from('budgets').select('*').eq('id', budget.id).single(),
+        supabase.from('budget_environments').select('*').eq('budget_id', budget.id).order('sort_order'),
         supabase.from('budget_items').select('*').eq('budget_id', budget.id).order('created_at'),
       ])
       if (budgetError) throw budgetError
+      if (envError) throw envError
       if (itemsError) throw itemsError
+
       const row = full as {
         client_id: string
         project_name: string
-        environment: string | null
         measurements: string | null
-        labor_cost: number
         discount: number
         notes: string | null
+        environment: string | null
+        commercial_terms: string | null
+        entrada_percent: number | null
+        manufacturing_timeline: string | null
+        installation_timeline: string | null
       }
+
+      const envRows = environments ?? []
+      const itemRows = items ?? []
+
+      let environmentForms: BudgetEnvironmentForm[]
+
+      if (envRows.length > 0) {
+        environmentForms = envRows.map((env) => {
+          const envItems = itemRows.filter((item) => item.environment_id === env.id)
+          const imageUrl = (env as { image_url?: string | null }).image_url?.trim() || null
+          return {
+            id: env.id,
+            name: env.name,
+            description: (env as { description?: string | null }).description ?? '',
+            image_url: imageUrl,
+            imageFile: null,
+            imagePreview: imageUrl,
+            items: envItems.map((item) => ({
+              description: item.description,
+              specifications: item.material ?? '',
+              quantity: Number(item.quantity),
+              unit_price: Number(item.unit_price),
+            })),
+          }
+        })
+      } else {
+        environmentForms = [{
+          name: row.environment?.trim() || 'Geral',
+          description: '',
+          image_url: null,
+          imageFile: null,
+          imagePreview: null,
+          items: itemRows.map((item) => ({
+            description: item.description,
+            specifications: item.material ?? '',
+            quantity: Number(item.quantity),
+            unit_price: Number(item.unit_price),
+          })),
+        }]
+      }
+
+      environmentForms = environmentForms.map((env) => ({
+        ...env,
+        items: env.items.length > 0 ? env.items : [emptyItem()],
+      }))
+
       setForm({
         client_id: row.client_id,
         project_name: row.project_name,
-        environment: row.environment ?? '',
         measurements: row.measurements ?? '',
-        labor_cost: row.labor_cost ?? 0,
         discount: row.discount ?? 0,
         notes: row.notes ?? '',
-        items: (items ?? []).length > 0
-          ? (items ?? []).map((item) => ({
-              description: item.description,
-              material: item.material ?? '',
-              material_id: null,
-              quantity: Number(item.quantity),
-              unit_price: Number(item.unit_price),
-            }))
-          : [emptyItem()],
+        commercial_terms: row.commercial_terms?.trim() || DEFAULT_COMMERCIAL_TERMS,
+        entrada_percent: Number(row.entrada_percent ?? DEFAULT_ENTRADA_PERCENT),
+        manufacturing_timeline: row.manufacturing_timeline?.trim() || DEFAULT_MANUFACTURING_TIMELINE,
+        installation_timeline: row.installation_timeline?.trim() || DEFAULT_INSTALLATION_TIMELINE,
+        environments: environmentForms.length > 0 ? environmentForms : [emptyEnvironment()],
       })
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao carregar orçamento')
@@ -154,24 +238,90 @@ export function BudgetsPage() {
     }
   }
 
-  const saveBudgetItems = async (budgetId: string) => {
-    const { error: deleteError } = await supabase.from('budget_items').delete().eq('budget_id', budgetId)
-    if (deleteError) throw deleteError
+  const saveBudgetEnvironments = async (budgetId: string) => {
+    const { error: deleteItemsError } = await supabase.from('budget_items').delete().eq('budget_id', budgetId)
+    if (deleteItemsError) throw deleteItemsError
 
-    const validItems = form.items.filter((item) => item.description.trim())
-    if (validItems.length === 0) return
+    const { error: deleteEnvError } = await supabase.from('budget_environments').delete().eq('budget_id', budgetId)
+    if (deleteEnvError) throw deleteEnvError
 
-    const { error: insertError } = await supabase.from('budget_items').insert(
-      validItems.map((item) => ({
-        budget_id: budgetId,
-        description: item.description.trim(),
-        material: item.material || null,
-        quantity: item.quantity,
-        unit_price: item.unit_price,
-        total_price: item.quantity * item.unit_price,
-      })),
-    )
-    if (insertError) throw insertError
+    const validEnvironments = form.environments
+      .map((env, index) => ({ ...env, sort_order: index }))
+      .filter((env) => env.name.trim())
+
+    for (const env of validEnvironments) {
+      let imageUrl = env.image_url
+      if (env.imageFile) {
+        imageUrl = await uploadBudgetEnvironmentImage(env.imageFile, budgetId)
+      }
+
+      const { data: createdEnv, error: envInsertError } = await supabase
+        .from('budget_environments')
+        .insert({
+          budget_id: budgetId,
+          name: env.name.trim(),
+          sort_order: env.sort_order,
+          subtotal: environmentSellingTotal(env),
+          description: env.description.trim() || null,
+          image_url: imageUrl,
+        })
+        .select('id')
+        .single()
+
+      if (envInsertError) throw envInsertError
+
+      const validItems = env.items.filter((item) => item.description.trim())
+      if (validItems.length === 0) continue
+
+      const { error: itemsInsertError } = await supabase.from('budget_items').insert(
+        validItems.map((item) => ({
+          budget_id: budgetId,
+          environment_id: createdEnv.id,
+          description: item.description.trim(),
+          material: item.specifications.trim() || null,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          total_price: item.quantity * item.unit_price,
+        })),
+      )
+      if (itemsInsertError) throw itemsInsertError
+    }
+  }
+
+  const handleEnvironmentImageChange = (envIndex: number, file: File | null) => {
+    if (file) {
+      try {
+        validateBudgetEnvironmentImage(file)
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : 'Imagem inválida')
+        return
+      }
+    }
+
+    const environments = [...form.environments]
+    const current = environments[envIndex]
+    if (current.imagePreview?.startsWith('blob:')) URL.revokeObjectURL(current.imagePreview)
+
+    environments[envIndex] = {
+      ...current,
+      imageFile: file,
+      imagePreview: file ? URL.createObjectURL(file) : current.image_url,
+      image_url: file ? current.image_url : current.image_url,
+    }
+    setForm({ ...form, environments })
+  }
+
+  const clearEnvironmentImage = (envIndex: number) => {
+    const environments = [...form.environments]
+    const current = environments[envIndex]
+    if (current.imagePreview?.startsWith('blob:')) URL.revokeObjectURL(current.imagePreview)
+    environments[envIndex] = {
+      ...current,
+      imageFile: null,
+      image_url: null,
+      imagePreview: null,
+    }
+    setForm({ ...form, environments })
   }
 
   const onSubmit = async () => {
@@ -179,28 +329,38 @@ export function BudgetsPage() {
       toast.error('Cliente e projeto são obrigatórios')
       return
     }
-    if (!form.items.some((item) => item.description.trim())) {
+    if (!form.environments.some((env) => env.name.trim())) {
+      toast.error('Adicione pelo menos um ambiente com nome')
+      return
+    }
+    if (flattenValidItems(form.environments).length === 0) {
       toast.error('Adicione pelo menos um item com descrição')
       return
     }
     setSubmitting(true)
     try {
-      const materials_cost = form.items.reduce((s, i) => s + i.quantity * i.unit_price, 0)
+      const materials_cost = projectSellingTotal(form.environments)
+      const primaryEnvironment = form.environments.find((env) => env.name.trim())?.name.trim() ?? null
       const payload = {
         client_id: form.client_id,
         project_name: form.project_name.trim(),
-        environment: form.environment.trim() || null,
+        environment: primaryEnvironment,
         measurements: form.measurements.trim() || null,
-        labor_cost: form.labor_cost,
+        labor_cost: 0,
         materials_cost,
         discount: form.discount,
         total_value: calculateTotal(),
         notes: form.notes.trim() || null,
+        commercial_terms: form.commercial_terms.trim() || null,
+        entrada_percent: Math.min(100, Math.max(0, form.entrada_percent)),
+        manufacturing_timeline: form.manufacturing_timeline.trim() || null,
+        installation_timeline: form.installation_timeline.trim() || null,
+        proposal_template: 'premium',
       }
 
       if (editing) {
         await updateRecord('budgets', editing.id, payload)
-        await saveBudgetItems(editing.id)
+        await saveBudgetEnvironments(editing.id)
         toast.success('Orçamento atualizado!')
       } else {
         const budget = await createRecord('budgets', {
@@ -208,7 +368,7 @@ export function BudgetsPage() {
           lead_id: searchParams.get('lead') || null,
           status: 'em_analise',
         })
-        await saveBudgetItems((budget as { id: string }).id)
+        await saveBudgetEnvironments((budget as { id: string }).id)
         toast.success('Orçamento criado!')
       }
       setDialogOpen(false)
@@ -221,9 +381,19 @@ export function BudgetsPage() {
     }
   }
 
-  const removeItem = (index: number) => {
-    if (form.items.length <= 1) return
-    setForm({ ...form, items: form.items.filter((_, i) => i !== index) })
+  const removeEnvironment = (envIndex: number) => {
+    if (form.environments.length <= 1) return
+    setForm({ ...form, environments: form.environments.filter((_, i) => i !== envIndex) })
+  }
+
+  const removeItem = (envIndex: number, itemIndex: number) => {
+    const environments = [...form.environments]
+    if (environments[envIndex].items.length <= 1) return
+    environments[envIndex] = {
+      ...environments[envIndex],
+      items: environments[envIndex].items.filter((_, i) => i !== itemIndex),
+    }
+    setForm({ ...form, environments })
   }
 
   const updateStatus = async (id: string, status: string) => {
@@ -269,41 +439,17 @@ export function BudgetsPage() {
     }
   }
 
-  const handleMaterialSelect = (material: BudgetMaterialOption) => {
-    if (materialPickerIndex === null) return
-    const items = [...form.items]
-    items[materialPickerIndex] = {
-      ...items[materialPickerIndex],
-      material: material.name,
-      material_id: material.id,
-      unit_price: material.unit_cost,
-    }
-    setForm({ ...form, items })
-    setMaterialPickerIndex(null)
-  }
-
   const openPdfDialog = (budget: Budget) => {
     setPdfBudget(budget)
-    setPdfDetailLevel('materiais')
     setPdfDialogOpen(true)
   }
 
-  const runExportPdf = async (detailLevel: BudgetPdfDetailLevel) => {
+  const runExportPdf = async () => {
     if (!pdfBudget) return
     setPdfExporting(true)
     try {
-      const [{ data: full, error: budgetError }, { data: items, error: itemsError }] = await Promise.all([
-        supabase
-          .from('budgets')
-          .select('*, client:clients(name, document, phone, whatsapp, email, address_street, address_number, address_complement, address_neighborhood, address_city, address_state, address_zip)')
-          .eq('id', pdfBudget.id)
-          .single(),
-        supabase.from('budget_items').select('*').eq('budget_id', pdfBudget.id),
-      ])
-      if (budgetError) throw budgetError
-      if (itemsError) throw itemsError
-      await exportBudgetPDF(full, items ?? [], { detailLevel })
-      toast.success('PDF exportado!')
+      await downloadBudgetProposalPdf(pdfBudget.id, pdfBudget.number, pdfBudget.project_name)
+      toast.success('PDF gerado com sucesso!')
       setPdfDialogOpen(false)
       setPdfBudget(null)
     } catch (e) {
@@ -321,14 +467,13 @@ export function BudgetsPage() {
             setDialogOpen(open)
             if (!open) {
               setEditing(null)
-              setMaterialPickerIndex(null)
               setFormLoading(false)
             }
           }}>
             <DialogTrigger asChild>
               <Button onClick={openCreate}><Plus className="h-4 w-4" /> Novo Orçamento</Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>{editing ? `Editar Orçamento #${editing.number}` : 'Novo Orçamento'}</DialogTitle>
                 <DialogDescription>
@@ -349,7 +494,7 @@ export function BudgetsPage() {
                     <SelectContent>{clients.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
                     <Label>Projeto</Label>
                     <Input
@@ -358,59 +503,250 @@ export function BudgetsPage() {
                       onChange={(e) => setForm({ ...form, project_name: e.target.value })}
                     />
                   </div>
-                  <div><Label>Ambiente</Label><Input placeholder="Ex: Cozinha planejada" value={form.environment} onChange={(e) => setForm({ ...form, environment: e.target.value })} /></div>
+                  <div>
+                    <Label>Medidas gerais</Label>
+                    <Input
+                      placeholder="Ex: L 3,20m × A 2,70m"
+                      value={form.measurements}
+                      onChange={(e) => setForm({ ...form, measurements: e.target.value })}
+                    />
+                  </div>
                 </div>
-                <div>
-                  <Label>Medidas</Label>
-                  <Textarea
-                    placeholder="Ex: Largura 3,20m × Altura 2,70m — detalhes de medidas do ambiente"
-                    value={form.measurements}
-                    onChange={(e) => setForm({ ...form, measurements: e.target.value })}
-                    rows={2}
-                  />
-                </div>
-                <div>
-                  <Label>Itens</Label>
-                  {form.items.map((item, i) => (
-                    <div key={i} className="mb-2 flex gap-2">
-                      <div className="grid flex-1 grid-cols-4 gap-2">
-                        <Input placeholder="Descrição" value={item.description} onChange={(e) => { const items = [...form.items]; items[i].description = e.target.value; setForm({ ...form, items }) }} />
-                        <button
-                          type="button"
-                          onClick={() => setMaterialPickerIndex(i)}
-                          className="flex h-10 w-full items-center gap-2 rounded-lg border border-border bg-surface-elevated px-3 text-left text-sm text-white shadow-[inset_0_1px_2px_rgba(0,0,0,0.2)] transition-all hover:border-gold/40 focus-visible:outline-none focus-visible:border-gold/40 focus-visible:ring-2 focus-visible:ring-gold/20 light:bg-white light:text-gray-900"
-                        >
-                          <Package className="h-3.5 w-3.5 shrink-0 text-gold" />
-                          <span className={item.material ? 'truncate' : 'truncate text-gray-500'}>
-                            {item.material || 'Material'}
-                          </span>
-                        </button>
-                        <Input type="number" min={0} step="0.001" placeholder="Qtd" value={item.quantity} onChange={(e) => { const items = [...form.items]; items[i].quantity = Number(e.target.value); setForm({ ...form, items }) }} />
-                        <CurrencyInput placeholder="Preço" value={item.unit_price} onChange={(unit_price) => { const items = [...form.items]; items[i].unit_price = unit_price; setForm({ ...form, items }) }} />
+
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <Label className="flex items-center gap-2 text-base">
+                      <Layers className="h-4 w-4 text-gold" />
+                      Ambientes
+                    </Label>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setForm({
+                        ...form,
+                        environments: [...form.environments, emptyEnvironment(`Ambiente ${form.environments.length + 1}`)],
+                      })}
+                    >
+                      + Ambiente
+                    </Button>
+                  </div>
+
+                  {form.environments.map((env, envIndex) => (
+                    <div key={envIndex} className="rounded-xl border border-border/60 bg-surface-elevated/40 p-4">
+                      <div className="mb-3 flex items-center gap-2">
+                        <Input
+                          placeholder="Ex: Sala, Cozinha, Quarto..."
+                          value={env.name}
+                          onChange={(e) => {
+                            const environments = [...form.environments]
+                            environments[envIndex] = { ...environments[envIndex], name: e.target.value }
+                            setForm({ ...form, environments })
+                          }}
+                          className="font-medium"
+                        />
+                        {form.environments.length > 1 && (
+                          <Button type="button" variant="ghost" size="icon" onClick={() => removeEnvironment(envIndex)} title="Remover ambiente">
+                            <Trash2 className="h-4 w-4 text-red-400" />
+                          </Button>
+                        )}
                       </div>
-                      {form.items.length > 1 && (
-                        <Button type="button" variant="ghost" size="icon" className="shrink-0" onClick={() => removeItem(i)} title="Remover item">
-                          <X className="h-4 w-4 text-red-400" />
+
+                      <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-[112px_1fr]">
+                        <div className="space-y-2">
+                          <Label>Foto (PDF)</Label>
+                          <label className="flex h-28 cursor-pointer flex-col items-center justify-center overflow-hidden rounded-lg border border-dashed border-border bg-surface-elevated/60 text-xs text-gray-500 hover:border-gold/40">
+                            {env.imagePreview ? (
+                              <img src={env.imagePreview} alt={env.name || 'Ambiente'} className="h-full w-full object-cover" />
+                            ) : (
+                              <>
+                                <ImagePlus className="mb-1 h-5 w-5 text-gold" />
+                                Adicionar
+                              </>
+                            )}
+                            <input
+                              type="file"
+                              accept="image/jpeg,image/png,image/webp,image/gif"
+                              className="hidden"
+                              onChange={(e) => handleEnvironmentImageChange(envIndex, e.target.files?.[0] ?? null)}
+                            />
+                          </label>
+                          {env.imagePreview && (
+                            <Button type="button" variant="ghost" size="sm" className="h-7 w-full text-xs" onClick={() => clearEnvironmentImage(envIndex)}>
+                              Remover foto
+                            </Button>
+                          )}
+                        </div>
+                        <div>
+                          <Label>Descrição comercial do ambiente</Label>
+                          <Textarea
+                            placeholder="Texto opcional exibido no PDF (ex.: composição e estilo do ambiente)"
+                            value={env.description}
+                            onChange={(e) => {
+                              const environments = [...form.environments]
+                              environments[envIndex] = { ...environments[envIndex], description: e.target.value }
+                              setForm({ ...form, environments })
+                            }}
+                            rows={4}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        {env.items.map((item, itemIndex) => (
+                          <div key={itemIndex} className="flex gap-2">
+                            <div className="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-[1.2fr_1.4fr_0.6fr_0.9fr]">
+                              <Input
+                                placeholder="Móvel (ex: Torre)"
+                                value={item.description}
+                                onChange={(e) => {
+                                  const environments = [...form.environments]
+                                  const items = [...environments[envIndex].items]
+                                  items[itemIndex] = { ...items[itemIndex], description: e.target.value }
+                                  environments[envIndex] = { ...environments[envIndex], items }
+                                  setForm({ ...form, environments })
+                                }}
+                              />
+                              <Input
+                                placeholder="Especificações (acabamento, medidas...)"
+                                value={item.specifications}
+                                onChange={(e) => {
+                                  const environments = [...form.environments]
+                                  const items = [...environments[envIndex].items]
+                                  items[itemIndex] = { ...items[itemIndex], specifications: e.target.value }
+                                  environments[envIndex] = { ...environments[envIndex], items }
+                                  setForm({ ...form, environments })
+                                }}
+                              />
+                              <Input
+                                type="number"
+                                min={0}
+                                step="0.001"
+                                placeholder="Qtd"
+                                value={item.quantity}
+                                onChange={(e) => {
+                                  const environments = [...form.environments]
+                                  const items = [...environments[envIndex].items]
+                                  items[itemIndex] = { ...items[itemIndex], quantity: Number(e.target.value) }
+                                  environments[envIndex] = { ...environments[envIndex], items }
+                                  setForm({ ...form, environments })
+                                }}
+                              />
+                              <CurrencyInput
+                                placeholder="Valor"
+                                value={item.unit_price}
+                                onChange={(unit_price) => {
+                                  const environments = [...form.environments]
+                                  const items = [...environments[envIndex].items]
+                                  items[itemIndex] = { ...items[itemIndex], unit_price }
+                                  environments[envIndex] = { ...environments[envIndex], items }
+                                  setForm({ ...form, environments })
+                                }}
+                              />
+                            </div>
+                            {env.items.length > 1 && (
+                              <Button type="button" variant="ghost" size="icon" className="shrink-0" onClick={() => removeItem(envIndex, itemIndex)} title="Remover item">
+                                <X className="h-4 w-4 text-red-400" />
+                              </Button>
+                            )}
+                          </div>
+                        ))}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const environments = [...form.environments]
+                            environments[envIndex] = {
+                              ...environments[envIndex],
+                              items: [...environments[envIndex].items, emptyItem()],
+                            }
+                            setForm({ ...form, environments })
+                          }}
+                        >
+                          + Móvel
                         </Button>
-                      )}
+                      </div>
+
+                      <div className="mt-3 rounded-lg border border-gold/20 bg-gold/5 px-3 py-2 text-sm">
+                        <span className="text-gray-400">Valor do ambiente: </span>
+                        <span className="font-semibold text-gold">{formatCurrency(environmentSellingTotal(env))}</span>
+                      </div>
                     </div>
                   ))}
-                  <Button type="button" variant="outline" size="sm" onClick={() => setForm({ ...form, items: [...form.items, emptyItem()] })}>+ Item</Button>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div><Label>Mão de Obra</Label><CurrencyInput value={form.labor_cost} onChange={(labor_cost) => setForm({ ...form, labor_cost })} /></div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div><Label>Desconto</Label><CurrencyInput value={form.discount} onChange={(discount) => setForm({ ...form, discount })} /></div>
                 </div>
+
+                <div className="space-y-3 rounded-xl border border-border/60 bg-surface-elevated/30 p-4">
+                  <Label className="text-base">Proposta comercial (PDF)</Label>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div>
+                      <Label>Percentual de entrada (%)</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={100}
+                        step={1}
+                        value={form.entrada_percent}
+                        onChange={(e) => {
+                          const parsed = Number(e.target.value)
+                          setForm({
+                            ...form,
+                            entrada_percent: Number.isFinite(parsed)
+                              ? Math.min(100, Math.max(0, parsed))
+                              : DEFAULT_ENTRADA_PERCENT,
+                          })
+                        }}
+                      />
+                      <p className="mt-1 text-xs text-gray-500">
+                        Usado no card de entrada do PDF ({formatCurrency(calculateTotal() * (form.entrada_percent / 100))} de {formatCurrency(calculateTotal())})
+                      </p>
+                    </div>
+                  </div>
+                  <div>
+                    <Label>Condições comerciais</Label>
+                    <Textarea
+                      placeholder="Entrada, saldo, formas de pagamento..."
+                      value={form.commercial_terms}
+                      onChange={(e) => setForm({ ...form, commercial_terms: e.target.value })}
+                      rows={3}
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div>
+                      <Label>Prazo de fabricação / produção</Label>
+                      <Textarea
+                        value={form.manufacturing_timeline}
+                        onChange={(e) => setForm({ ...form, manufacturing_timeline: e.target.value })}
+                        rows={2}
+                      />
+                    </div>
+                    <div>
+                      <Label>Prazo de montagem</Label>
+                      <Textarea
+                        value={form.installation_timeline}
+                        onChange={(e) => setForm({ ...form, installation_timeline: e.target.value })}
+                        rows={2}
+                      />
+                    </div>
+                  </div>
+                </div>
+
                 <div>
                   <Label>Observações</Label>
                   <Textarea
-                    placeholder="Condições, prazos ou detalhes adicionais da proposta"
+                    placeholder="Observações adicionais exibidas no PDF"
                     value={form.notes}
                     onChange={(e) => setForm({ ...form, notes: e.target.value })}
                     rows={2}
                   />
                 </div>
-                <p className="text-lg font-bold text-gold">Total: {formatCurrency(calculateTotal())}</p>
+                <div className="rounded-lg border border-gold/20 bg-gold/5 p-3 text-sm">
+                  <p className="text-gray-400">Total da proposta: <span className="font-bold text-gold">{formatCurrency(calculateTotal())}</span></p>
+                </div>
                 <Button onClick={onSubmit} className="w-full" disabled={submitting}>
                   {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   {editing ? 'Salvar Alterações' : 'Salvar Orçamento'}
@@ -470,51 +806,24 @@ export function BudgetsPage() {
       }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Exportar PDF</DialogTitle>
+            <DialogTitle>Exportar proposta comercial</DialogTitle>
             <DialogDescription>
-              {pdfBudget ? `Orçamento #${pdfBudget.number} — ${pdfBudget.project_name}` : 'Escolha o nível de detalhe do arquivo'}
+              {pdfBudget
+                ? `Orçamento #${pdfBudget.number} — ${pdfBudget.project_name}`
+                : 'Gere o PDF premium da proposta comercial'}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
-            <button
-              type="button"
-              onClick={() => setPdfDetailLevel('materiais')}
-              className={`w-full rounded-lg border p-4 text-left transition-colors ${
-                pdfDetailLevel === 'materiais'
-                  ? 'border-gold/50 bg-gold/10'
-                  : 'border-white/10 bg-white/[0.02] hover:border-white/20'
-              }`}
-            >
-              <p className="font-medium text-white">Com materiais</p>
-              <p className="mt-1 text-xs text-gray-500">
-                Lista completa com descrição, material, quantidade e valores de cada item.
-              </p>
-            </button>
-            <button
-              type="button"
-              onClick={() => setPdfDetailLevel('valores')}
-              className={`w-full rounded-lg border p-4 text-left transition-colors ${
-                pdfDetailLevel === 'valores'
-                  ? 'border-gold/50 bg-gold/10'
-                  : 'border-white/10 bg-white/[0.02] hover:border-white/20'
-              }`}
-            >
-              <p className="font-medium text-white">Somente valores</p>
-              <p className="mt-1 text-xs text-gray-500">
-                Apenas totais (materiais, mão de obra e valor final), sem listagem de itens.
-              </p>
-            </button>
-            <Button className="w-full" disabled={pdfExporting} onClick={() => void runExportPdf(pdfDetailLevel)}>
-              {pdfExporting ? 'Gerando PDF...' : 'Gerar PDF'}
+            <p className="text-sm text-gray-400">
+              Documento profissional com capa, ambientes, valores de venda e condições comerciais.
+              Custos internos e mão de obra não são exibidos.
+            </p>
+            <Button className="w-full" disabled={pdfExporting} onClick={() => void runExportPdf()}>
+              {pdfExporting ? 'Gerando PDF...' : 'Gerar PDF Premium'}
             </Button>
           </div>
         </DialogContent>
       </Dialog>
-      <MaterialPickerDialog
-        open={materialPickerIndex !== null}
-        onOpenChange={(open) => { if (!open) setMaterialPickerIndex(null) }}
-        onSelect={handleMaterialSelect}
-      />
     </PageContent>
   )
 }

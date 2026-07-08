@@ -5,12 +5,16 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:full": "concurrently -k -n app,pdf -c cyan,magenta \"vite\" \"npm run pdf:server\"",
+    "pdf:server": "tsx --tsconfig tsconfig.pdf-server.json --env-file=.env server/pdf-server.ts",
+    "pdf:install-browser": "puppeteer browsers install chrome",
+    "postinstall": "node scripts/ensure-puppeteer-chrome.mjs",
     "build": "tsc -b && vite build",
     "generate:pwa-icons": "node scripts/generate-pwa-icons.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
-    "deploy:cloudflare": "wrangler deploy --assets=./dist",
-    "deploy:cloudflare:preview": "wrangler versions upload --assets=./dist"
+    "deploy:cloudflare": "npx wrangler deploy --assets=./dist",
+    "deploy:cloudflare:preview": "npx wrangler versions upload --assets=./dist"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",
@@ -45,7 +49,10 @@
     "tailwind-merge": "^3.6.0",
     "xlsx": "^0.18.5",
     "zod": "^3.25.76",
-    "zustand": "^5.0.14"
+    "zustand": "^5.0.14",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "puppeteer": "^24.36.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -58,6 +65,10 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.6.0",
+    "concurrently": "^9.2.1",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "tsx": "^4.20.5",
     "sharp": "^0.34.5",
     "tailwindcss": "^4.1.8",
     "typescript": "~6.0.2",

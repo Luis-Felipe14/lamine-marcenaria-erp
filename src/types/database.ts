@@ -50,6 +50,7 @@ export interface Database {
           address_city: string | null
           address_state: string | null
           address_zip: string | null
+          architect_id: string | null
           notes: string | null
           created_at: string
           updated_at: string
@@ -57,6 +58,25 @@ export interface Database {
         }
         Insert: Omit<Database['public']['Tables']['clients']['Row'], 'id' | 'created_at' | 'updated_at' | 'deleted_at'>
         Update: Partial<Database['public']['Tables']['clients']['Insert']>
+      }
+      architects: {
+        Row: {
+          id: string
+          name: string
+          phone: string | null
+          email: string | null
+          office: string | null
+          commission_rate: number | null
+          commission_type: string
+          bank_info: string | null
+          notes: string | null
+          is_active: boolean
+          created_at: string
+          updated_at: string
+          deleted_at: string | null
+        }
+        Insert: Omit<Database['public']['Tables']['architects']['Row'], 'id' | 'created_at' | 'updated_at' | 'deleted_at'>
+        Update: Partial<Database['public']['Tables']['architects']['Insert']>
       }
       leads: {
         Row: {
@@ -68,6 +88,7 @@ export interface Database {
           origin: string | null
           campaign_id: string | null
           responsible_id: string | null
+          architect_id: string | null
           estimated_value: number
           status: string
           notes: string | null
@@ -96,6 +117,11 @@ export interface Database {
           total_value: number
           status: string
           notes: string | null
+          commercial_terms: string | null
+          entrada_percent: number
+          manufacturing_timeline: string | null
+          installation_timeline: string | null
+          proposal_template: string
           responsible_id: string | null
           created_at: string
           updated_at: string
@@ -111,6 +137,7 @@ export interface Database {
         Row: {
           id: string
           budget_id: string
+          environment_id: string | null
           description: string
           material: string | null
           quantity: number
@@ -119,6 +146,23 @@ export interface Database {
         }
         Insert: Omit<Database['public']['Tables']['budget_items']['Row'], 'id'>
         Update: Partial<Database['public']['Tables']['budget_items']['Insert']>
+      }
+      budget_environments: {
+        Row: {
+          id: string
+          budget_id: string
+          name: string
+          sort_order: number
+          subtotal: number
+          description: string | null
+          image_url: string | null
+          created_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['budget_environments']['Row'], 'id' | 'created_at'> & {
+          id?: string
+          created_at?: string
+        }
+        Update: Partial<Database['public']['Tables']['budget_environments']['Insert']>
       }
       orders: {
         Row: {
@@ -226,8 +270,14 @@ export interface Database {
           document: string | null
           phone: string | null
           email: string | null
+          address: string | null
+          notes: string | null
+          created_at: string
+          updated_at: string
+          deleted_at: string | null
         }
         Insert: Partial<Database['public']['Tables']['suppliers']['Row']> & { name: string }
+        Update: Partial<Database['public']['Tables']['suppliers']['Insert']>
       }
       financial_transactions: {
         Row: {

@@ -1,4 +1,26 @@
 import type { LumberCreditMovementType } from '@/services/lumberyard-credit.service'
+import type { LumberCreditMaterialOption } from '@/services/lookups.service'
+
+export interface LumberCreditMaterialLine {
+  material_id: string
+  name: string
+  specification?: string | null
+  brand?: string | null
+  unit: string
+  unit_price: number
+  quantity: number
+  amount: number
+  purchase_id?: string | null
+  purchase_number?: number | null
+}
+
+export function formatMaterialLineDescription(line: Pick<LumberCreditMaterialLine, 'name' | 'brand' | 'specification'>): string {
+  return [
+    line.name,
+    line.brand ? `Marca: ${line.brand}` : null,
+    line.specification ? `Espec.: ${line.specification}` : null,
+  ].filter(Boolean).join(' — ')
+}
 
 export interface LumberCreditFormState {
   movement_type: LumberCreditMovementType
@@ -9,6 +31,7 @@ export interface LumberCreditFormState {
   supplier_id: string
   material_id: string
   material_description: string
+  material_lines: LumberCreditMaterialLine[]
   quantity: number | ''
   invoice_number: string
   installment_number: number | ''
@@ -42,6 +65,52 @@ export interface LumberCreditFieldRule {
   section?: 'link' | 'payment' | 'material' | 'core' | 'notes' | 'reference'
 }
 
+export function computeMaterialLineAmount(quantity: number, unitPrice: number): number {
+  return Math.round(quantity * unitPrice * 100) / 100
+}
+
+export function createMaterialLineFromOption(material: LumberCreditMaterialOption): LumberCreditMaterialLine {
+  const quantity = 1
+  const unit_price = material.unit_cost
+  return {
+    material_id: material.id,
+    name: material.name,
+    specification: material.specification,
+    brand: material.brand,
+    unit: material.unit,
+    unit_price,
+    quantity,
+    amount: computeMaterialLineAmount(quantity, unit_price),
+  }
+}
+
+export function applyMaterialLinePatch(
+  line: LumberCreditMaterialLine,
+  patch: Partial<LumberCreditMaterialLine>,
+): LumberCreditMaterialLine {
+  const next = { ...line, ...patch }
+
+  if (patch.quantity !== undefined || patch.unit_price !== undefined) {
+    next.amount = computeMaterialLineAmount(next.quantity, next.unit_price)
+  } else if (patch.amount !== undefined && next.quantity > 0) {
+    next.unit_price = Math.round((next.amount / next.quantity) * 100) / 100
+  }
+
+  return next
+}
+
+export function computeSaidaTotalAmount(form: LumberCreditFormState): number {
+  if (form.material_lines.length > 0) {
+    return form.material_lines.reduce((sum, line) => sum + Number(line.amount), 0)
+  }
+  return Number(form.amount) || 0
+}
+
+export function withSaidaAmountFromLines(form: LumberCreditFormState): LumberCreditFormState {
+  if (form.movement_type !== 'saida' || form.material_lines.length === 0) return form
+  return { ...form, amount: computeSaidaTotalAmount(form) }
+}
+
 export function createEmptyLumberCreditForm(
   movementType: LumberCreditMovementType = 'entrada',
 ): LumberCreditFormState {
@@ -54,6 +123,7 @@ export function createEmptyLumberCreditForm(
     supplier_id: '',
     material_id: '',
     material_description: '',
+    material_lines: [],
     quantity: '',
     invoice_number: '',
     installment_number: '',
@@ -181,9 +251,9 @@ const CORE_RULES: Record<LumberCreditFieldKey, LumberCreditFieldRule> = {
   installment_number: { visible: false, required: false, label: 'Parcela atual', section: 'payment' },
   installment_total: { visible: false, required: false, label: 'Total de parcelas', section: 'payment' },
   supplier_id: { visible: false, required: false, label: 'Madereira / Fornecedor', section: 'material' },
-  material_id: { visible: false, required: false, label: 'Material cadastrado (opcional)', section: 'material' },
-  material_description: { visible: false, required: false, label: 'Descrição do material', section: 'material' },
-  quantity: { visible: false, required: false, label: 'Quantidade (opcional)', section: 'material' },
+  material_id: { visible: false, required: false, label: 'Material cadastrado', section: 'material' },
+  material_description: { visible: false, required: false, label: 'Descrição avulsa', section: 'material' },
+  quantity: { visible: false, required: false, label: 'Quantidade', section: 'material' },
   invoice_number: { visible: false, required: false, label: 'Nº NF / referência', section: 'reference' },
   notes: { visible: true, required: false, label: 'Observações', section: 'notes' },
 }
@@ -196,10 +266,11 @@ function hasFieldValue(form: LumberCreditFormState, key: LumberCreditFieldKey): 
 
 export function getLumberCreditFormFields(
   form: LumberCreditFormState,
-  options: { isEditing?: boolean } = {},
+  options: { isEditing?: boolean; allowCrossClient?: boolean } = {},
 ): Record<LumberCreditFieldKey, LumberCreditFieldRule> {
-  const { isEditing = false } = options
+  const { isEditing = false, allowCrossClient = false } = options
   const fields = { ...CORE_RULES }
+  const hasMaterialLines = form.material_lines.length > 0
 
   if (form.movement_type === 'entrada') {
     fields.client_id = { ...fields.client_id, visible: true, required: true }
@@ -211,7 +282,15 @@ export function getLumberCreditFormFields(
         fields[key] = { ...fields[key], ...rule, visible: rule.visible ?? true }
       }
     }
-  } else {
+  } else if (isEditing) {
+    fields.client_id = {
+      ...fields.client_id,
+      visible: true,
+      required: true,
+      hint: allowCrossClient
+        ? 'Selecione de qual cliente o crédito será utilizado'
+        : 'A saída consome apenas o saldo deste cliente',
+    }
     fields.supplier_id = { ...fields.supplier_id, visible: true, required: false }
     fields.material_id = { ...fields.material_id, visible: true, required: false }
     fields.material_description = {
@@ -238,6 +317,39 @@ export function getLumberCreditFormFields(
       ...fields.notes,
       placeholder: 'Combinado com a madereira, responsável, etc.',
     }
+  } else {
+    fields.client_id = {
+      ...fields.client_id,
+      visible: true,
+      required: true,
+      hint: allowCrossClient
+        ? 'Selecione de qual cliente o crédito será utilizado'
+        : 'A saída consome apenas o saldo deste cliente',
+    }
+    fields.supplier_id = { ...fields.supplier_id, visible: true, required: false }
+    fields.material_description = {
+      ...fields.material_description,
+      visible: !hasMaterialLines,
+      required: !hasMaterialLines,
+      placeholder: 'Ex.: MDF 18mm — 12 chapas',
+      hint: 'Use apenas quando não houver material cadastrado no estoque',
+    }
+    fields.invoice_number = {
+      ...fields.invoice_number,
+      visible: true,
+      required: false,
+      label: 'Nº NF / referência',
+      section: 'reference',
+    }
+    fields.notes = {
+      ...fields.notes,
+      placeholder: 'Combinado com a madereira, responsável, etc.',
+    }
+    fields.amount = {
+      ...fields.amount,
+      label: hasMaterialLines ? 'Valor total da operação' : 'Valor',
+      hint: hasMaterialLines ? 'Soma automática dos materiais selecionados' : undefined,
+    }
   }
 
   if (isEditing) {
@@ -257,6 +369,10 @@ export function shouldShowEntradaPaymentDetails(form: LumberCreditFormState): bo
 
 export function getEntradaLinkSectionTitle(): string {
   return 'Cliente e pedido'
+}
+
+export function getSaidaLinkSectionTitle(): string {
+  return 'Cliente do crédito'
 }
 
 export function getSaidaMaterialSectionTitle(): string {
@@ -314,7 +430,10 @@ export function clearHiddenLumberCreditFields(
 export function validateLumberCreditForm(
   form: LumberCreditFormState,
   fields: Record<LumberCreditFieldKey, LumberCreditFieldRule>,
+  options: { isEditing?: boolean } = {},
 ): string | null {
+  const { isEditing = false } = options
+
   for (const [key, rule] of Object.entries(fields) as [LumberCreditFieldKey, LumberCreditFieldRule][]) {
     if (!rule.visible || !rule.required) continue
     const value = form[key]
@@ -322,14 +441,27 @@ export function validateLumberCreditForm(
       return 'Informe um valor válido'
     }
     if (key === 'material_description' && !String(value).trim()) {
-      return 'Informe o material ou a descrição na saída'
+      return 'Informe a descrição do material ou selecione itens cadastrados'
     }
     if (key !== 'amount' && key !== 'material_description' && (value === '' || value === null || value === undefined)) {
       return `Preencha o campo: ${rule.label ?? key}`
     }
   }
 
-  if (form.movement_type === 'saida' && !form.material_id && !form.material_description.trim()) {
+  if (form.movement_type === 'saida' && !isEditing) {
+    if (form.material_lines.length > 0) {
+      if (form.material_lines.some((line) => line.quantity <= 0)) {
+        return 'Informe quantidade válida em todos os materiais'
+      }
+      if (form.material_lines.some((line) => line.amount <= 0)) {
+        return 'Informe valor válido em todos os materiais'
+      }
+    } else if (!form.material_description.trim()) {
+      return 'Adicione materiais cadastrados ou informe a descrição avulsa'
+    }
+  }
+
+  if (form.movement_type === 'saida' && isEditing && !form.material_id && !form.material_description.trim()) {
     return 'Informe o material ou a descrição na saída'
   }
 
@@ -372,11 +504,38 @@ export function sanitizeLumberCreditPayload(form: LumberCreditFormState) {
   }
 }
 
+export function buildLumberCreditSaidaPayload(form: LumberCreditFormState) {
+  const base = sanitizeLumberCreditPayload(form)
+  const material_lines: LumberCreditMaterialLine[] = form.material_lines.map((line) => ({
+    material_id: line.material_id,
+    name: line.name,
+    specification: line.specification,
+    brand: line.brand,
+    unit: line.unit,
+    unit_price: line.unit_price,
+    quantity: line.quantity,
+    amount: line.amount,
+  }))
+
+  const singleLine = material_lines.length === 1 ? material_lines[0] : null
+
+  return {
+    ...base,
+    amount: computeSaidaTotalAmount(form),
+    material_id: singleLine?.material_id ?? null,
+    material_description: singleLine
+      ? formatMaterialLineDescription(singleLine)
+      : `Retirada de ${material_lines.length} materiais`,
+    quantity: singleLine?.quantity ?? null,
+    material_lines,
+  }
+}
+
 export function applyLumberCreditFormContextChange(
   form: LumberCreditFormState,
   patch: Partial<LumberCreditFormState>,
 ): LumberCreditFormState {
-  const next = { ...form, ...patch }
+  const next = withSaidaAmountFromLines({ ...form, ...patch })
   const fields = getLumberCreditFormFields(next)
   return clearHiddenLumberCreditFields(next, fields)
 }

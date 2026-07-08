@@ -31,6 +31,17 @@ export async function fetchSupplierOptions() {
   return data ?? []
 }
 
+export async function fetchArchitectOptions() {
+  const { data, error } = await supabase
+    .from('architects')
+    .select('id, name')
+    .eq('is_active', true)
+    .is('deleted_at', null)
+    .order('name')
+  throwIfError(error, 'arquitetos')
+  return data ?? []
+}
+
 export async function fetchMaterialOptions() {
   const { data, error } = await supabase
     .from('materials')
@@ -52,6 +63,11 @@ export interface BudgetMaterialOption {
   supplier_id: string | null
 }
 
+export interface LumberCreditMaterialOption extends BudgetMaterialOption {
+  specification: string | null
+  brand: string | null
+}
+
 export async function fetchMaterialsForBudget(): Promise<BudgetMaterialOption[]> {
   const { data, error } = await supabase
     .from('materials')
@@ -64,6 +80,29 @@ export async function fetchMaterialsForBudget(): Promise<BudgetMaterialOption[]>
     unit_cost: Number(m.unit_cost),
     current_stock: Number(m.current_stock),
     supplier_id: m.supplier_id ?? null,
+  }))
+}
+
+export async function fetchMaterialsForLumberCredit(): Promise<LumberCreditMaterialOption[]> {
+  const { data, error } = await supabase
+    .from('materials')
+    .select('id, code, name, category, unit, unit_cost, current_stock, supplier_id, specification, brand')
+    .is('deleted_at', null)
+    .eq('is_active', true)
+    .order('name')
+
+  throwIfError(error, 'materiais')
+  return (data ?? []).map((m) => ({
+    id: m.id,
+    code: m.code,
+    name: m.name,
+    category: m.category,
+    unit: m.unit,
+    unit_cost: Number(m.unit_cost),
+    current_stock: Number(m.current_stock),
+    supplier_id: m.supplier_id ?? null,
+    specification: m.specification ?? null,
+    brand: m.brand ?? null,
   }))
 }
 

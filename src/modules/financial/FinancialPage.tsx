@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { Plus, Pencil, TrendingUp, TrendingDown } from 'lucide-react'
+import { Plus, Pencil, TrendingUp, TrendingDown, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { PageHeader } from '@/components/shared/PageHeader'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { PageContent, PageDataZone, PageKpiZone } from '@/components/shared/PageLayout'
 import { DataTable } from '@/components/shared/DataTable'
 import { TableToolbar } from '@/components/shared/TableToolbar'
@@ -23,7 +24,7 @@ import {
 } from '@/lib/financial-form.schema'
 import { formatCurrency, formatDate, formatInstallment } from '@/lib/utils'
 import { invalidateDashboardMetrics } from '@/lib/invalidate-dashboard'
-import { createRecord, updateRecord } from '@/services/api'
+import { createRecord, updateRecord, softDelete } from '@/services/api'
 import type { FinancialTransaction } from '@/services/financial.service'
 import {
   useFinancialSummary,
@@ -35,11 +36,13 @@ import {
   useLookupEmployeesPayroll,
 } from '@/hooks/useQueries'
 import { FinancialTransactionForm } from '@/modules/financial/FinancialTransactionForm'
+import { useConfirm } from '@/hooks/useConfirm'
 
 interface Transaction extends FinancialTransaction {}
 
 export function FinancialPage() {
   const queryClient = useQueryClient()
+  const { confirm, dialogProps } = useConfirm()
   const [filter, setFilter] = useState<'all' | 'receita' | 'despesa'>('all')
   const [page, setPage] = useState(1)
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -140,6 +143,22 @@ export function FinancialPage() {
     }
   }
 
+  const handleDelete = async (row: Transaction) => {
+    const label = row.employee?.name ?? row.description
+    if (!await confirm({
+      title: 'Excluir lançamento',
+      message: `Deseja excluir este lançamento (${label} — ${formatCurrency(row.amount)})? Esta ação não pode ser desfeita.`,
+    })) return
+
+    try {
+      await softDelete('financial_transactions', row.id)
+      toast.success('Lançamento excluído')
+      await invalidateFinancial()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao excluir')
+    }
+  }
+
   const linkLabel = (row: Transaction) => {
     if (row.type === 'receita') {
       const parts: string[] = []
@@ -234,9 +253,14 @@ export function FinancialPage() {
             key: 'actions',
             header: '',
             render: (r) => (
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(r)} aria-label="Editar">
-                <Pencil className="h-3.5 w-3.5" />
-              </Button>
+              <div className="flex gap-1">
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(r)} aria-label="Editar">
+                  <Pencil className="h-3.5 w-3.5" />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => void handleDelete(r)} aria-label="Excluir">
+                  <Trash2 className="h-3.5 w-3.5 text-red-400" />
+                </Button>
+              </div>
             ),
           },
         ]}
@@ -247,6 +271,8 @@ export function FinancialPage() {
         onPageChange={setPage}
       />
       </PageDataZone>
+
+      <ConfirmDialog {...dialogProps} />
     </PageContent>
   )
 }

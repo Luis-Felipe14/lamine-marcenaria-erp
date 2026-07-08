@@ -2,7 +2,7 @@ import type { LucideIcon } from 'lucide-react'
 import {
   LayoutDashboard, Target, Users, FileText, Package, Factory,
   Warehouse, ShoppingCart, DollarSign, Megaphone, UserCog,
-  MessageSquare, BarChart3, Settings, CreditCard,
+  MessageSquare, BarChart3, Settings, CreditCard, Truck, PenTool,
 } from 'lucide-react'
 
 export interface NavEntry {
@@ -22,11 +22,13 @@ export const NAV_ENTRIES: NavEntry[] = [
   { id: 'dashboard-financeiro', label: 'Dashboard Financeiro', path: '/dashboard/financeiro', icon: LayoutDashboard, group: 'Visão Geral', permission: 'dashboard.read', keywords: ['financeiro', 'receita'] },
   { id: 'crm', label: 'CRM', path: '/crm', icon: Target, group: 'Comercial', permission: 'crm.read', keywords: ['leads', 'funil', 'vendas'] },
   { id: 'clientes', label: 'Clientes', path: '/clientes', icon: Users, group: 'Comercial', permission: 'clients.read', keywords: ['cadastro', 'cliente'] },
+  { id: 'arquitetos', label: 'Arquitetos', path: '/arquitetos', icon: PenTool, group: 'Comercial', permission: 'clients.read', keywords: ['arquiteto', 'parceiro', 'comissão'] },
   { id: 'orcamentos', label: 'Orçamentos', path: '/orcamentos', icon: FileText, group: 'Comercial', permission: 'budgets.read', keywords: ['proposta', 'orçamento'] },
   { id: 'pedidos', label: 'Pedidos', path: '/pedidos', icon: Package, group: 'Operacional', permission: 'orders.read', keywords: ['pedido', 'entrega'] },
   { id: 'producao', label: 'Produção', path: '/producao', icon: Factory, group: 'Operacional', permission: 'production.read', keywords: ['op', 'ordem produção'] },
   { id: 'estoque', label: 'Estoque', path: '/estoque', icon: Warehouse, group: 'Operacional', permission: 'inventory.read', keywords: ['material', 'almoxarifado'] },
   { id: 'compras', label: 'Compras', path: '/compras', icon: ShoppingCart, group: 'Operacional', permission: 'purchases.read', keywords: ['fornecedor', 'compra'] },
+  { id: 'fornecedores', label: 'Fornecedores', path: '/fornecedores', icon: Truck, group: 'Operacional', permission: 'purchases.read', keywords: ['madereira', 'fornecedor', 'supplier'] },
   { id: 'credito-madereira', label: 'Crédito Madereira', path: '/credito-madereira', icon: CreditCard, group: 'Operacional', permission: 'lumber_credit.read', keywords: ['madereira', 'cartão', 'crédito', 'material'] },
   { id: 'financeiro', label: 'Financeiro', path: '/financeiro', icon: DollarSign, group: 'Financeiro', permission: 'financial.read', keywords: ['lançamento', 'receita', 'despesa'] },
   { id: 'marketing', label: 'Inv. Marketing', path: '/marketing', icon: Megaphone, group: 'Financeiro', permission: 'marketing.read', keywords: ['investimento', 'gasto', 'prestador', 'divulgação'] },

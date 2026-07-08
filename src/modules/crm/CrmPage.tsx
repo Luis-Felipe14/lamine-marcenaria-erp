@@ -21,13 +21,21 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { supabase } from '@/lib/supabase'
-import { LEAD_STATUSES } from '@/lib/constants'
+import { LEAD_STATUSES, SELECT_NONE } from '@/lib/constants'
 import { queryKeys } from '@/lib/query-keys'
 import { invalidateDashboardMetrics } from '@/lib/invalidate-dashboard'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { createRecord, updateRecord, softDelete } from '@/services/api'
 import { useConfirm } from '@/hooks/useConfirm'
-import { useCrmLeads } from '@/hooks/useQueries'
+import { useCrmLeads, useLookupArchitects } from '@/hooks/useQueries'
+
+function toSelectValue(value?: string | null) {
+  return value && value.length > 0 ? value : SELECT_NONE
+}
+
+function fromSelectValue(value: string) {
+  return value === SELECT_NONE ? '' : value
+}
 
 const leadSchema = z.object({
   name: z.string().min(2, 'Nome obrigatório'),
@@ -35,6 +43,7 @@ const leadSchema = z.object({
   whatsapp: z.string().optional(),
   email: z.string().email().optional().or(z.literal('')),
   origin: z.string().optional(),
+  architect_id: z.string().optional(),
   estimated_value: z.coerce.number().min(0).optional(),
   notes: z.string().optional(),
 })
@@ -44,6 +53,7 @@ export function CrmPage() {
   const queryClient = useQueryClient()
   const { confirm, dialogProps } = useConfirm()
   const { data: leads = [], isLoading: loading } = useCrmLeads()
+  const { data: architects = [] } = useLookupArchitects()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [selectedLead, setSelectedLead] = useState<EnrichedLead | null>(null)
   const [history, setHistory] = useState<{ id: string; description: string; contact_date: string; contact_type: string }[]>([])
@@ -72,7 +82,12 @@ export function CrmPage() {
 
   const onSubmit = async (data: z.infer<typeof leadSchema>) => {
     try {
-      await createRecord('leads', { ...data, status: 'novo_lead', estimated_value: data.estimated_value ?? 0 })
+      await createRecord('leads', {
+        ...data,
+        architect_id: data.architect_id || null,
+        status: 'novo_lead',
+        estimated_value: data.estimated_value ?? 0,
+      })
       toast.success('Lead criado!')
       setDialogOpen(false)
       form.reset()
@@ -121,6 +136,7 @@ export function CrmPage() {
         phone: lead.phone,
         whatsapp: lead.whatsapp,
         email: lead.email,
+        architect_id: lead.architect_id ?? null,
       })
       await updateRecord('leads', lead.id, {
         client_id: (client as unknown as { id: string }).id,
@@ -148,6 +164,25 @@ export function CrmPage() {
       toast.success('Contato registrado')
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao registrar contato')
+    }
+  }
+
+  const updateArchitect = async (leadId: string, architectId: string) => {
+    const value = architectId || null
+    try {
+      await updateRecord('leads', leadId, { architect_id: value })
+      if (selectedLead?.id === leadId) {
+        const architect = architects.find((item) => item.id === value)
+        setSelectedLead({
+          ...selectedLead,
+          architect_id: value,
+          architect: architect ? { name: architect.name } : null,
+        })
+      }
+      await refreshLeads()
+      toast.success('Arquiteto atualizado')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao atualizar arquiteto')
     }
   }
 
@@ -184,6 +219,21 @@ export function CrmPage() {
                 <FormField label="Origem" hint="Ex: Instagram, Indicação">
                   <Input {...form.register('origin')} />
                 </FormField>
+                <div className="space-y-1.5">
+                  <Label>Arquiteto parceiro</Label>
+                  <Select
+                    value={toSelectValue(form.watch('architect_id'))}
+                    onValueChange={(v) => form.setValue('architect_id', fromSelectValue(v))}
+                  >
+                    <SelectTrigger><SelectValue placeholder="Nenhum" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={SELECT_NONE}>Nenhum</SelectItem>
+                      {architects.map((architect) => (
+                        <SelectItem key={architect.id} value={architect.id}>{architect.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <FormField label="Valor estimado">
                   <CurrencyInput
                     value={form.watch('estimated_value') ?? 0}
@@ -237,6 +287,21 @@ export function CrmPage() {
                   <SelectContent>
                     {LEAD_STATUSES.map((s) => (
                       <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Arquiteto parceiro</Label>
+                <Select
+                  value={toSelectValue(selectedLead.architect_id)}
+                  onValueChange={(v) => void updateArchitect(selectedLead.id, fromSelectValue(v))}
+                >
+                  <SelectTrigger><SelectValue placeholder="Nenhum" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={SELECT_NONE}>Nenhum</SelectItem>
+                    {architects.map((architect) => (
+                      <SelectItem key={architect.id} value={architect.id}>{architect.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

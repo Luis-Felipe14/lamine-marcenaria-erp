@@ -16,14 +16,17 @@ import { FormField } from '@/components/ui/form-field'
 import { MaskedInput } from '@/components/ui/masked-input'
 import { TableToolbar } from '@/components/shared/TableToolbar'
 import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { supabase } from '@/lib/supabase'
+import { SELECT_NONE } from '@/lib/constants'
 import { formatDate } from '@/lib/utils'
 import { createRecord, updateRecord, softDelete } from '@/services/api'
 import { invalidateDashboardMetrics } from '@/lib/invalidate-dashboard'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { useConfirm } from '@/hooks/useConfirm'
-import { useClients } from '@/hooks/useQueries'
+import { useClients, useLookupArchitects } from '@/hooks/useQueries'
 import type { Database } from '@/types/database'
 
 type Client = Database['public']['Tables']['clients']['Row']
@@ -36,8 +39,17 @@ const schema = z.object({
   email: z.string().optional(),
   address_street: z.string().optional(),
   address_city: z.string().optional(),
+  architect_id: z.string().optional(),
   notes: z.string().optional(),
 })
+
+function toSelectValue(value?: string | null) {
+  return value && value.length > 0 ? value : SELECT_NONE
+}
+
+function fromSelectValue(value: string) {
+  return value === SELECT_NONE ? '' : value
+}
 
 export function ClientsPage() {
   const queryClient = useQueryClient()
@@ -55,6 +67,7 @@ export function ClientsPage() {
   const form = useForm({ resolver: zodResolver(schema) })
 
   const { data: result, isLoading: loading, isFetching } = useClients(page, debouncedSearch)
+  const { data: architects = [] } = useLookupArchitects()
   const clients = result?.data ?? []
   const totalPages = result?.totalPages ?? 1
 
@@ -66,7 +79,7 @@ export function ClientsPage() {
     setEditing(null)
     form.reset({
       name: '', document: '', phone: '', whatsapp: '', email: '',
-      address_street: '', address_city: '', notes: '',
+      address_street: '', address_city: '', architect_id: '', notes: '',
     })
     setDialogOpen(true)
   }
@@ -81,6 +94,7 @@ export function ClientsPage() {
       email: client.email ?? '',
       address_street: client.address_street ?? '',
       address_city: client.address_city ?? '',
+      architect_id: client.architect_id ?? '',
       notes: client.notes ?? '',
     })
     setDialogOpen(true)
@@ -90,10 +104,16 @@ export function ClientsPage() {
     setSubmitting(true)
     try {
       if (editing) {
-        await updateRecord('clients', editing.id, data)
+        await updateRecord('clients', editing.id, {
+          ...data,
+          architect_id: data.architect_id || null,
+        })
         toast.success('Cliente atualizado!')
       } else {
-        await createRecord('clients', data)
+        await createRecord('clients', {
+          ...data,
+          architect_id: data.architect_id || null,
+        })
         toast.success('Cliente cadastrado!')
       }
       setDialogOpen(false)
@@ -179,6 +199,21 @@ export function ClientsPage() {
                 <FormField label="Cidade">
                   <Input {...form.register('address_city')} />
                 </FormField>
+                <div className="space-y-1.5">
+                  <Label>Arquiteto parceiro</Label>
+                  <Select
+                    value={toSelectValue(form.watch('architect_id'))}
+                    onValueChange={(v) => form.setValue('architect_id', fromSelectValue(v))}
+                  >
+                    <SelectTrigger><SelectValue placeholder="Nenhum" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={SELECT_NONE}>Nenhum</SelectItem>
+                      {architects.map((architect) => (
+                        <SelectItem key={architect.id} value={architect.id}>{architect.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-gray-500">Observações</label>
                   <Textarea {...form.register('notes')} className="min-h-[80px]" />

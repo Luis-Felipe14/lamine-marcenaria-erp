@@ -13,7 +13,9 @@ export const APP_MONOGRAM = {
 /** Favicon da aba — usa o mesmo monograma */
 export const APP_FAVICON = APP_MONOGRAM
 
-/** Coloque public/lamine-background.png — quando existir, será a camada principal do fundo */
+/** Usado no cabeçalho do PDF premium e como fundo opcional do app */
 export const APP_BACKGROUND = {
   optionalPhoto: '/lamine-background.png',
+  /** Fallback se lamine-background.png não existir */
+  fallback: '/login-background.png',
 } as const

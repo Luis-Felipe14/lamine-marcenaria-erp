@@ -18,7 +18,9 @@ import {
 import { getFinancialSummary, listFinancialTransactions } from '@/services/financial.service'
 import {
   computeLumberCreditStats,
+  getLumberCreditSettings,
   listAllLumberCreditMovementsForStats,
+  listLumberCreditBalancesByClient,
   listLumberCreditMovementsPaginated,
   type LumberCreditFilters,
 } from '@/services/lumberyard-credit.service'
@@ -28,6 +30,7 @@ import {
   fetchOrderOptions,
   fetchPurchaseOptions,
   fetchSupplierOptions,
+  fetchArchitectOptions,
   fetchEmployeePayrollOptions,
 } from '@/services/lookups.service'
 import { paginatedQuery } from '@/services/api'
@@ -147,13 +150,29 @@ export function useLumberCreditAllMovements() {
   })
 }
 
-export function useLumberCreditStats() {
+export function useLumberCreditStats(clientId?: string) {
   const { data: movements, ...rest } = useLumberCreditAllMovements()
   const stats = useMemo(
-    () => (movements ? computeLumberCreditStats(movements) : undefined),
-    [movements]
+    () => (movements ? computeLumberCreditStats(movements, clientId) : undefined),
+    [movements, clientId],
   )
   return { ...rest, data: stats }
+}
+
+export function useLumberCreditBalancesByClient() {
+  return useQuery({
+    queryKey: queryKeys.lumberCreditBalancesByClient,
+    queryFn: listLumberCreditBalancesByClient,
+    staleTime: 60_000,
+  })
+}
+
+export function useLumberCreditSettings() {
+  return useQuery({
+    queryKey: queryKeys.lumberCreditSettings,
+    queryFn: getLumberCreditSettings,
+    staleTime: 60_000,
+  })
 }
 
 export function useLumberCreditMovements(
@@ -190,6 +209,10 @@ export function useLookupOrders() {
 
 export function useLookupSuppliers() {
   return useQuery({ queryKey: queryKeys.lookupSuppliers, queryFn: fetchSupplierOptions, staleTime: 120_000 })
+}
+
+export function useLookupArchitects() {
+  return useQuery({ queryKey: queryKeys.lookupArchitects, queryFn: fetchArchitectOptions, staleTime: 120_000 })
 }
 
 export function useLookupMaterials() {

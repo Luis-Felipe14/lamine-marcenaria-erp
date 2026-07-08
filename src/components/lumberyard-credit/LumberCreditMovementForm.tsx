@@ -1,5 +1,6 @@
-import { useMemo, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import { Package, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { CurrencyInput } from '@/components/ui/currency-input'
@@ -9,15 +10,24 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { LUMBER_CREDIT_MOVEMENT_TYPES, PAYMENT_METHODS, SELECT_NONE } from '@/lib/constants'
 import {
   applyLumberCreditFormContextChange,
+  applyMaterialLinePatch,
+  computeSaidaTotalAmount,
   createEmptyLumberCreditForm,
+  createMaterialLineFromOption,
   getEntradaLinkSectionTitle,
   getLumberCreditFormFields,
+  getSaidaLinkSectionTitle,
   getSaidaMaterialSectionTitle,
   shouldShowEntradaPaymentDetails,
+  withSaidaAmountFromLines,
   type LumberCreditFormState,
 } from '@/lib/lumberyard-credit-form.schema'
 import { formatCurrency } from '@/lib/utils'
 import type { LumberCreditMovement, LumberCreditMovementType } from '@/services/lumberyard-credit.service'
+import type { LumberCreditMaterialOption } from '@/services/lookups.service'
+import type { Supplier } from '@/services/suppliers.service'
+import { LumberCreditMaterialPickerDialog } from '@/components/lumberyard-credit/LumberCreditMaterialPickerDialog'
+import { SupplierQuickCreateDialog } from '@/components/lumberyard-credit/SupplierQuickCreateDialog'
 
 function toSelectValue(id: string) {
   return id || SELECT_NONE
@@ -56,6 +66,9 @@ interface LumberCreditMovementFormProps {
   orders: LookupOrder[]
   suppliers: LookupSupplier[]
   materials: LookupMaterial[]
+  allowCrossClient?: boolean
+  clientBalances?: Array<{ client_id: string; balance: number }>
+  onSupplierCreated?: (supplier: Supplier) => void
 }
 
 export function LumberCreditMovementForm({
@@ -68,10 +81,16 @@ export function LumberCreditMovementForm({
   orders,
   suppliers,
   materials,
+  allowCrossClient = false,
+  clientBalances = [],
+  onSupplierCreated,
 }: LumberCreditMovementFormProps) {
+  const [materialPickerOpen, setMaterialPickerOpen] = useState(false)
+  const [supplierDialogOpen, setSupplierDialogOpen] = useState(false)
+
   const fields = useMemo(
-    () => getLumberCreditFormFields(form, { isEditing: Boolean(editing) }),
-    [form, editing],
+    () => getLumberCreditFormFields(form, { isEditing: Boolean(editing), allowCrossClient }),
+    [form, editing, allowCrossClient],
   )
 
   const filteredOrders = useMemo(() => {
@@ -79,7 +98,8 @@ export function LumberCreditMovementForm({
     return orders.filter((o) => o.client_id === form.client_id)
   }, [orders, form.client_id])
 
-  const showEntradaLink = fields.client_id.visible || fields.order_id.visible
+  const showEntradaLink = form.movement_type === 'entrada' && (fields.client_id.visible || fields.order_id.visible)
+  const showSaidaLink = form.movement_type === 'saida' && fields.client_id.visible
   const showPaymentDetails = shouldShowEntradaPaymentDetails(form)
     && (
       fields.installment_number.visible
@@ -91,9 +111,45 @@ export function LumberCreditMovementForm({
     || fields.material_id.visible
     || fields.material_description.visible
     || fields.quantity.visible
+    || (!editing && form.movement_type === 'saida')
+
+  const saidaUsesMaterialLines = form.movement_type === 'saida' && !editing
+  const saidaAmountLocked = saidaUsesMaterialLines && form.material_lines.length > 0
 
   const patchForm = (patch: Partial<LumberCreditFormState>) => {
     setForm((current) => applyLumberCreditFormContextChange(current, patch))
+  }
+
+  const handleMaterialsConfirm = (materials: LumberCreditMaterialOption[]) => {
+    const existing = new Map(form.material_lines.map((line) => [line.material_id, line]))
+    const nextLines = [...form.material_lines]
+
+    for (const material of materials) {
+      if (existing.has(material.id)) continue
+      nextLines.push(createMaterialLineFromOption(material))
+    }
+
+    patchForm(withSaidaAmountFromLines({
+      ...form,
+      material_lines: nextLines,
+      material_description: '',
+      material_id: '',
+      quantity: '',
+    }))
+  }
+
+  const updateMaterialLine = (materialId: string, patch: Partial<LumberCreditFormState['material_lines'][number]>) => {
+    const material_lines = form.material_lines.map((line) => (
+      line.material_id === materialId ? applyMaterialLinePatch(line, patch) : line
+    ))
+    patchForm(withSaidaAmountFromLines({ ...form, material_lines }))
+  }
+
+  const removeMaterialLine = (materialId: string) => {
+    patchForm(withSaidaAmountFromLines({
+      ...form,
+      material_lines: form.material_lines.filter((line) => line.material_id !== materialId),
+    }))
   }
 
   return (
@@ -127,8 +183,13 @@ export function LumberCreditMovementForm({
       <FormSection title="Valores">
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <Label>Valor *</Label>
-            <CurrencyInput value={form.amount} onChange={(amount) => setForm({ ...form, amount })} />
+            <Label>{fields.amount.label}{fields.amount.required && ' *'}</Label>
+            <CurrencyInput
+              value={saidaAmountLocked ? computeSaidaTotalAmount(form) : form.amount}
+              onChange={(amount) => setForm({ ...form, amount })}
+              disabled={saidaAmountLocked}
+            />
+            {fields.amount.hint ? <FieldHint text={fields.amount.hint} /> : null}
           </div>
           <div>
             <Label>Data *</Label>
@@ -199,6 +260,35 @@ export function LumberCreditMovementForm({
               <FieldHint text={fields.order_id.hint} />
             </div>
           )}
+        </FormSection>
+      )}
+
+      {showSaidaLink && (
+        <FormSection title={getSaidaLinkSectionTitle()}>
+          <div>
+            <Label>
+              {fields.client_id.label}
+              {fields.client_id.required && ' *'}
+            </Label>
+            <Select
+              value={toSelectValue(form.client_id)}
+              onValueChange={(v) => patchForm({ client_id: fromSelectValue(v) })}
+            >
+              <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+              <SelectContent>
+                {clients.map((c) => {
+                  const balance = clientBalances.find((row) => row.client_id === c.id)?.balance
+                  return (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                      {balance !== undefined ? ` — ${formatCurrency(balance)}` : ''}
+                    </SelectItem>
+                  )
+                })}
+              </SelectContent>
+            </Select>
+            <FieldHint text={fields.client_id.hint} />
+          </div>
         </FormSection>
       )}
 
@@ -292,20 +382,98 @@ export function LumberCreditMovementForm({
       {showMaterialSection && (
         <FormSection title={getSaidaMaterialSectionTitle()}>
           {fields.supplier_id.visible && (
-            <div>
+            <div className="space-y-2">
               <Label>{fields.supplier_id.label}</Label>
-              <Select
-                value={toSelectValue(form.supplier_id)}
-                onValueChange={(v) => patchForm({ supplier_id: fromSelectValue(v) })}
-              >
-                <SelectTrigger><SelectValue placeholder="Opcional" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={SELECT_NONE}>Não informado</SelectItem>
-                  {suppliers.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <div className="flex gap-2">
+                <Select
+                  value={toSelectValue(form.supplier_id)}
+                  onValueChange={(v) => patchForm({ supplier_id: fromSelectValue(v) })}
+                >
+                  <SelectTrigger className="flex-1"><SelectValue placeholder="Opcional" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={SELECT_NONE}>Não informado</SelectItem>
+                    {suppliers.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Button type="button" variant="outline" size="icon" onClick={() => setSupplierDialogOpen(true)} title="Novo fornecedor">
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           )}
+
+          {saidaUsesMaterialLines ? (
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Label>Materiais cadastrados</Label>
+                <Button type="button" variant="outline" size="sm" onClick={() => setMaterialPickerOpen(true)}>
+                  <Package className="mr-2 h-4 w-4" />
+                  Selecionar materiais
+                </Button>
+              </div>
+
+              {form.material_lines.length > 0 ? (
+                <div className="space-y-2">
+                  {form.material_lines.map((line) => (
+                    <div key={line.material_id} className="rounded-lg border border-white/10 bg-white/[0.03] p-3">
+                      <div className="mb-2 flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="font-medium text-white">{line.name}</p>
+                          <p className="mt-0.5 text-xs text-gray-500">
+                            {line.brand ? `Marca: ${line.brand}` : 'Marca não informada'}
+                            {line.specification ? ` · ${line.specification}` : ''}
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 shrink-0"
+                          onClick={() => removeMaterialLine(line.material_id)}
+                          title="Remover material"
+                        >
+                          <Trash2 className="h-4 w-4 text-red-400" />
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                        <div>
+                          <Label>Quantidade ({line.unit})</Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            step={0.001}
+                            value={line.quantity}
+                            onChange={(e) => updateMaterialLine(line.material_id, {
+                              quantity: Number(e.target.value) || 0,
+                            })}
+                          />
+                        </div>
+                        <div>
+                          <Label>Preço unitário</Label>
+                          <CurrencyInput
+                            value={line.unit_price}
+                            onChange={(unit_price) => updateMaterialLine(line.material_id, { unit_price })}
+                          />
+                        </div>
+                        <div>
+                          <Label>Valor</Label>
+                          <CurrencyInput value={line.amount} onChange={() => undefined} disabled />
+                          <FieldHint text="Calculado: quantidade × preço unitário" />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  <p className="text-right text-sm text-gold">
+                    Total dos materiais: {formatCurrency(computeSaidaTotalAmount(form))}
+                  </p>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500">
+                  Selecione um ou mais materiais do estoque ou use a descrição avulsa abaixo.
+                </p>
+              )}
+            </div>
+          ) : null}
 
           {fields.material_id.visible && (
             <div>
@@ -402,9 +570,9 @@ export function LumberCreditMovementForm({
           <span>
             <span className="font-medium">Registrar compra recebida e dar entrada no estoque</span>
             <span className="mt-1 block text-xs text-gray-500">
-              {form.material_id
-                ? 'Será criada uma compra com status recebido e o material entrará no almoxarifado.'
-                : 'Selecione um material cadastrado para atualizar o estoque automaticamente.'}
+              {form.material_lines.length > 0
+                ? 'Será criada uma compra por material selecionado, com status recebido.'
+                : 'Selecione materiais cadastrados para atualizar o estoque automaticamente.'}
             </span>
           </span>
         </label>
@@ -422,6 +590,22 @@ export function LumberCreditMovementForm({
       <Button onClick={onSubmit} className="w-full" disabled={submitting}>
         {submitting ? 'Salvando...' : editing ? 'Salvar alterações' : 'Registrar'}
       </Button>
+
+      <LumberCreditMaterialPickerDialog
+        open={materialPickerOpen}
+        onOpenChange={setMaterialPickerOpen}
+        selectedIds={form.material_lines.map((line) => line.material_id)}
+        onConfirm={handleMaterialsConfirm}
+      />
+
+      <SupplierQuickCreateDialog
+        open={supplierDialogOpen}
+        onOpenChange={setSupplierDialogOpen}
+        onCreated={(supplier) => {
+          onSupplierCreated?.(supplier)
+          patchForm({ supplier_id: supplier.id })
+        }}
+      />
     </div>
   )
 }

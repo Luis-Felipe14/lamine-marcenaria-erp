@@ -1,9 +1,10 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { Plus, Pencil, Megaphone, Calendar, TrendingUp, Clock, AlertCircle } from 'lucide-react'
+import { Plus, Pencil, Megaphone, Calendar, TrendingUp, Clock, AlertCircle, Trash2 } from 'lucide-react'
 import { parseISO } from 'date-fns'
 import { toast } from 'sonner'
 import { PageHeader } from '@/components/shared/PageHeader'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { DataTable } from '@/components/shared/DataTable'
 import type { Column } from '@/components/shared/DataTable'
 import { StatCard } from '@/components/shared/StatCard'
@@ -19,9 +20,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { CAMPAIGN_CHANNELS, PAYMENT_STATUSES } from '@/lib/constants'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { createRecord, updateRecord } from '@/services/api'
+import { createRecord, updateRecord, softDelete } from '@/services/api'
+import { invalidateDashboardMetrics } from '@/lib/invalidate-dashboard'
 import { computeInvestmentStats, type MarketingInvestment } from '@/services/marketing.service'
 import { useIntersectionVisible } from '@/hooks/useIntersectionVisible'
+import { useConfirm } from '@/hooks/useConfirm'
 import { useMarketingInvestments, useMarketingInvestmentsPaginated } from '@/hooks/useQueries'
 
 const MarketingCharts = lazy(() =>
@@ -54,6 +57,7 @@ function paymentLabel(value: string) {
 
 export function MarketingPage() {
   const queryClient = useQueryClient()
+  const { confirm, dialogProps } = useConfirm()
   const { ref: chartsRef, visible: chartsVisible } = useIntersectionVisible('200px')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<MarketingInvestment | null>(null)
@@ -87,8 +91,26 @@ export function MarketingPage() {
   }, [filterYear, filterMonth])
 
   const refreshMarketing = useCallback(async () => {
-    await queryClient.invalidateQueries({ queryKey: ['marketing'] })
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['marketing'] }),
+      invalidateDashboardMetrics(queryClient),
+    ])
   }, [queryClient])
+
+  const handleDelete = useCallback(async (row: MarketingInvestment) => {
+    if (!await confirm({
+      title: 'Excluir investimento',
+      message: `Deseja excluir o investimento "${row.name}" (${formatCurrency(row.investment)})? Esta ação não pode ser desfeita.`,
+    })) return
+
+    try {
+      await softDelete('campaigns', row.id)
+      toast.success('Investimento excluído')
+      await refreshMarketing()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao excluir')
+    }
+  }, [confirm, refreshMarketing])
 
   const openCreate = useCallback(() => {
     setEditing(null)
@@ -140,12 +162,17 @@ export function MarketingPage() {
       key: 'actions',
       header: '',
       render: (r) => (
-        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(r)} aria-label="Editar">
-          <Pencil className="h-3.5 w-3.5" />
-        </Button>
+        <div className="flex gap-1">
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(r)} aria-label="Editar">
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => void handleDelete(r)} aria-label="Excluir">
+            <Trash2 className="h-3.5 w-3.5 text-red-400" />
+          </Button>
+        </div>
       ),
     },
-  ], [openEdit])
+  ], [openEdit, handleDelete])
 
   async function onSubmit() {
     if (!form.name.trim() || !form.start_date) {
@@ -357,6 +384,8 @@ export function MarketingPage() {
           )}
         </CardContent>
       </Card>
+
+      <ConfirmDialog {...dialogProps} />
     </div>
   )
 }

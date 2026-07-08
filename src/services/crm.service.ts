@@ -7,7 +7,7 @@ type LeadRow = Database['public']['Tables']['leads']['Row']
 async function fetchRawLeads(): Promise<LeadRow[]> {
   const embedded = await supabase
     .from('leads')
-    .select('*, client:clients(name), responsible:users!responsible_id(full_name)')
+    .select('*, client:clients(name), responsible:users!responsible_id(full_name), architect:architects(name)')
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
 
@@ -28,8 +28,9 @@ export async function fetchEnrichedLeads(): Promise<EnrichedLead[]> {
   const leadIds = rawLeads.map((l) => l.id)
   const responsibleIds = [...new Set(rawLeads.map((l) => l.responsible_id).filter(Boolean))] as string[]
   const clientIds = [...new Set(rawLeads.map((l) => l.client_id).filter(Boolean))] as string[]
+  const architectIds = [...new Set(rawLeads.map((l) => l.architect_id).filter(Boolean))] as string[]
 
-  const [contacts, budgets, usersRes, clientsRes] = await Promise.all([
+  const [contacts, budgets, usersRes, clientsRes, architectsRes] = await Promise.all([
     leadIds.length > 0
       ? supabase.from('lead_contact_history').select('lead_id, contact_date').in('lead_id', leadIds).order('contact_date', { ascending: false })
       : Promise.resolve({ data: [] }),
@@ -42,10 +43,14 @@ export async function fetchEnrichedLeads(): Promise<EnrichedLead[]> {
     clientIds.length > 0
       ? supabase.from('clients').select('id, name').in('id', clientIds)
       : Promise.resolve({ data: [] }),
+    architectIds.length > 0
+      ? supabase.from('architects').select('id, name').in('id', architectIds)
+      : Promise.resolve({ data: [] }),
   ])
 
   const userMap = new Map((usersRes.data ?? []).map((u) => [u.id, u.full_name]))
   const clientMap = new Map((clientsRes.data ?? []).map((c) => [c.id, c.name]))
+  const architectMap = new Map((architectsRes.data ?? []).map((a) => [a.id, a.name]))
 
   const lastContactMap = new Map<string, string>()
   for (const c of contacts.data ?? []) {
@@ -61,6 +66,7 @@ export async function fetchEnrichedLeads(): Promise<EnrichedLead[]> {
     const embedded = l as LeadRow & {
       client?: { name: string } | null
       responsible?: { full_name: string } | null
+      architect?: { name: string } | null
     }
 
     return {
@@ -72,6 +78,8 @@ export async function fetchEnrichedLeads(): Promise<EnrichedLead[]> {
       phone: l.phone,
       whatsapp: l.whatsapp,
       email: l.email,
+      architect_id: l.architect_id,
+      architect: embedded.architect ?? (l.architect_id ? { name: architectMap.get(l.architect_id) ?? 'Arquiteto' } : null),
       client: embedded.client ?? (l.client_id ? { name: clientMap.get(l.client_id) ?? l.name } : null),
       responsible: embedded.responsible ?? (l.responsible_id ? { full_name: userMap.get(l.responsible_id) ?? 'Sem responsável' } : null),
       last_contact: lastContactMap.get(l.id) ?? null,

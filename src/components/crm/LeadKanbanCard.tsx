@@ -12,6 +12,8 @@ export interface EnrichedLead {
   phone?: string | null
   whatsapp?: string | null
   email?: string | null
+  architect_id?: string | null
+  architect?: { name: string } | null
   client?: { name: string } | null
   responsible?: { full_name: string } | null
   last_contact?: string | null
@@ -67,6 +69,11 @@ export const LeadKanbanCard = memo(function LeadKanbanCard({ lead }: { lead: Enr
         {lead.environment && (
           <span className="rounded-md bg-surface-elevated px-2 py-0.5 text-[10px] text-gray-400">
             {lead.environment}
+          </span>
+        )}
+        {lead.architect?.name && (
+          <span className="rounded-md bg-surface-elevated px-2 py-0.5 text-[10px] text-gray-400">
+            Arq. {lead.architect.name}
           </span>
         )}
       </div>

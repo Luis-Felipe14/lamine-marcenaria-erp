@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Users, Target, FileText, Package, Factory,
   Warehouse, ShoppingCart, DollarSign, Megaphone, UserCog,
-  MessageSquare, BarChart3, Settings, Menu, LogOut, CreditCard, ClipboardList, X,
+  MessageSquare, BarChart3, Settings, Menu, LogOut, CreditCard, ClipboardList, X, PenTool,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SidebarBrandHeader } from './SidebarBrandHeader'
@@ -40,6 +40,7 @@ const mainNavGroups: NavGroup[] = [
     items: [
       { to: '/crm', icon: Target, label: 'CRM', permission: 'crm.read' },
       { to: '/clientes', icon: Users, label: 'Clientes', permission: 'clients.read' },
+      { to: '/arquitetos', icon: PenTool, label: 'Arquitetos', permission: 'clients.read' },
       { to: '/orcamentos', icon: FileText, label: 'Orçamentos', permission: 'budgets.read' },
     ],
   },

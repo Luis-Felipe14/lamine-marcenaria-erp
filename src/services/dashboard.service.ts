@@ -5,6 +5,7 @@ import { throwIfError } from '@/lib/supabase-helpers'
 import { startOfMonth, endOfMonth, format, subMonths } from 'date-fns'
 import { getInvestmentStats } from '@/services/marketing.service'
 import { getLumberCreditBalance } from '@/services/lumberyard-credit.service'
+import { getArchitectRankings } from '@/services/architects.service'
 
 const ACTIVE_ORDER_STATUSES = ['projeto_desenvolvimento', 'aguardando_material', 'em_producao', 'pronto_entrega', 'em_montagem']
 
@@ -209,10 +210,11 @@ export async function getFinancialChart(months = 6) {
 }
 
 export async function getCommercialMetrics() {
-  const [leadsReceived, budgetsSent, approvedRes] = await Promise.all([
+  const [leadsReceived, budgetsSent, approvedRes, architectRanking] = await Promise.all([
     countQuery('leads', (q) => q.is('deleted_at', null)),
     countQuery('budgets', (q) => q.eq('status', 'enviado').is('deleted_at', null)),
     supabase.from('budgets').select('id, total_value, responsible_id').in('status', [...BUDGET_WON_STATUSES]).is('deleted_at', null),
+    getArchitectRankings().catch(() => []),
   ])
 
   throwIfError(approvedRes.error, 'approved budgets')
@@ -245,6 +247,7 @@ export async function getCommercialMetrics() {
     conversionRate,
     soldValue,
     sellerRanking: [...sellerMap.values()].sort((a, b) => b.total - a.total),
+    architectRanking,
   }
 }
 

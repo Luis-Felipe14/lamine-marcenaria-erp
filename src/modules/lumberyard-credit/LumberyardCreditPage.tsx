@@ -11,9 +11,11 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { LumberCreditMovementForm } from '@/components/lumberyard-credit/LumberCreditMovementForm'
 import {
   createEmptyLumberCreditForm,
+  computeSaidaTotalAmount,
   getLumberCreditFormFields,
   sanitizeLumberCreditPayload,
   validateLumberCreditForm,
+  withSaidaAmountFromLines,
   type LumberCreditFormState,
 } from '@/lib/lumberyard-credit-form.schema'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -26,7 +28,7 @@ import {
   SELECT_NONE,
 } from '@/lib/constants'
 import { hasPermission } from '@/lib/permissions'
-import { formatCurrency, formatDate, formatInstallment } from '@/lib/utils'
+import { formatCurrency, formatDate } from '@/lib/utils'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { useConfirm } from '@/hooks/useConfirm'
 import {
@@ -35,12 +37,17 @@ import {
   useLookupOrders,
   useLookupSuppliers,
   useLumberCreditAllMovements,
+  useLumberCreditBalancesByClient,
   useLumberCreditMovements,
+  useLumberCreditSettings,
   useLumberCreditStats,
 } from '@/hooks/useQueries'
 import {
   saveLumberCreditMovement,
+  saveLumberCreditSaidaBatch,
   deleteLumberCreditMovement,
+  formatLumberCreditMovementDetail,
+  getLumberCreditPurchaseNumbers,
   withRunningBalances,
   type LumberCreditMovement,
   type LumberCreditMovementType,
@@ -89,15 +96,24 @@ export function LumberyardCreditPage() {
   const { data: orders = [] } = useLookupOrders()
   const { data: suppliers = [] } = useLookupSuppliers()
   const { data: materials = [] } = useLookupMaterials()
-  const { data: statsData } = useLumberCreditStats()
+  const { data: settingsData } = useLumberCreditSettings()
+  const { data: clientBalances = [] } = useLumberCreditBalancesByClient()
+  const { data: statsData } = useLumberCreditStats(filterClient || undefined)
   const { data: allMovements = [] } = useLumberCreditAllMovements()
   const { data: listResult, isLoading, isFetching } = useLumberCreditMovements(debouncedFilters, page)
 
   const movements = listResult?.data ?? []
   const totalPages = listResult?.totalPages ?? 1
   const stats = statsData ?? { totalEntrada: 0, totalSaida: 0, balance: 0 }
+  const allowCrossClient = settingsData?.allow_cross_client ?? false
+  const statsSubtitle = filterClient
+    ? clients.find((c) => c.id === filterClient)?.name ?? 'Cliente filtrado'
+    : 'Todos os clientes'
 
-  const rows = useMemo(() => withRunningBalances(movements, allMovements), [movements, allMovements])
+  const rows = useMemo(
+    () => withRunningBalances(movements, allMovements, { clientId: filterClient || undefined }),
+    [movements, allMovements, filterClient],
+  )
 
   const yearOptions = useMemo(() => {
     const years = new Set(movements.map((m) => parseISO(m.movement_date).getFullYear()))
@@ -113,9 +129,11 @@ export function LumberyardCreditPage() {
     await queryClient.invalidateQueries({ queryKey: ['lumber-credit'] })
   }
 
-  const openCreate = (type: LumberCreditMovementType = 'entrada') => {
+  const openCreate = (type: LumberCreditMovementType = 'entrada', prefillClientId = '') => {
     setEditing(null)
-    setForm(createEmptyLumberCreditForm(type))
+    const nextForm = createEmptyLumberCreditForm(type)
+    if (prefillClientId) nextForm.client_id = prefillClientId
+    setForm(nextForm)
     setDialogOpen(true)
   }
 
@@ -130,6 +148,18 @@ export function LumberyardCreditPage() {
       supplier_id: row.supplier_id ?? '',
       material_id: row.material_id ?? '',
       material_description: row.material_description ?? '',
+      material_lines: row.material_lines?.map((line) => ({
+        material_id: line.material_id,
+        name: line.name,
+        specification: line.specification,
+        brand: line.brand,
+        unit: line.unit,
+        unit_price: line.unit_price,
+        quantity: line.quantity,
+        amount: line.amount,
+        purchase_id: line.purchase_id,
+        purchase_number: line.purchase_number,
+      })) ?? [],
       quantity: row.quantity ?? '',
       invoice_number: row.invoice_number ?? '',
       installment_number: row.installment_number ?? '',
@@ -142,18 +172,32 @@ export function LumberyardCreditPage() {
   }
 
   const onSubmit = async () => {
-    const fields = getLumberCreditFormFields(form, { isEditing: Boolean(editing) })
-    const validationError = validateLumberCreditForm(form, fields)
+    const fields = getLumberCreditFormFields(form, {
+      isEditing: Boolean(editing),
+      allowCrossClient,
+    })
+    const validationError = validateLumberCreditForm(form, fields, { isEditing: Boolean(editing) })
     if (validationError) {
       toast.error(validationError)
       return
     }
+
+    const submitForm = withSaidaAmountFromLines(form)
+    const submitAmount = computeSaidaTotalAmount(submitForm)
+
+    const clientBalance = submitForm.client_id
+      ? clientBalances.find((row) => row.client_id === submitForm.client_id)?.balance ?? 0
+      : stats.balance
+    const availableBalance = submitForm.movement_type === 'saida' && submitForm.client_id
+      ? clientBalance
+      : stats.balance
+
     if (
-      form.movement_type === 'saida' &&
+      submitForm.movement_type === 'saida' &&
       !editing &&
-      Number(form.amount) > stats.balance &&
+      submitAmount > availableBalance &&
       !window.confirm(
-        `O valor (${formatCurrency(form.amount)}) excede o saldo disponível (${formatCurrency(stats.balance)}). Deseja registrar mesmo assim?`
+        `O valor (${formatCurrency(submitAmount)}) excede o saldo disponível (${formatCurrency(availableBalance)}). Deseja registrar mesmo assim?`
       )
     ) {
       return
@@ -161,16 +205,27 @@ export function LumberyardCreditPage() {
 
     setSubmitting(true)
     try {
-      const payload = sanitizeLumberCreditPayload(form)
-      const autoSync = form.movement_type === 'saida' && form.auto_sync && !editing
+      const autoSync = submitForm.movement_type === 'saida' && submitForm.auto_sync && !editing
 
       if (editing) {
+        const payload = sanitizeLumberCreditPayload(submitForm)
         await saveLumberCreditMovement({ ...payload, created_by: userId ?? null }, { editingId: editing.id })
         toast.success('Movimentação atualizada!')
+      } else if (submitForm.movement_type === 'saida' && submitForm.material_lines.length > 0) {
+        const saved = await saveLumberCreditSaidaBatch(submitForm, { autoSync, userId })
+        const purchaseNumbers = getLumberCreditPurchaseNumbers(saved)
+        if (autoSync && purchaseNumbers.length > 0) {
+          toast.success(
+            `Movimentação registrada com ${submitForm.material_lines.length} materiais! Compras #${purchaseNumbers.join(', #')} criadas.`,
+          )
+        } else {
+          toast.success(`Movimentação registrada com ${submitForm.material_lines.length} materiais!`)
+        }
       } else {
+        const payload = sanitizeLumberCreditPayload(submitForm)
         const saved = await saveLumberCreditMovement(
           { ...payload, created_by: userId ?? null },
-          { autoSync, userId }
+          { autoSync, userId },
         )
         if (autoSync && saved.purchase?.number) {
           toast.success(`Movimentação registrada! Compra #${saved.purchase.number} criada e estoque atualizado.`)
@@ -189,9 +244,10 @@ export function LumberyardCreditPage() {
   }
 
   const handleDelete = async (row: LumberCreditMovement) => {
-    const label = detailLabel(row)
-    const purchaseWarning = row.purchase?.number
-      ? ` Há uma compra vinculada (#${row.purchase.number}) — a exclusão não remove a compra nem reverte o estoque.`
+    const label = formatLumberCreditMovementDetail(row)
+    const purchaseNumbers = getLumberCreditPurchaseNumbers(row)
+    const purchaseWarning = purchaseNumbers.length > 0
+      ? ` Há ${purchaseNumbers.length > 1 ? 'compras vinculadas' : 'uma compra vinculada'} (#${purchaseNumbers.join(', #')}) — a exclusão não remove ${purchaseNumbers.length > 1 ? 'as compras' : 'a compra'} nem reverte o estoque.`
       : ''
     if (!await confirm({
       title: 'Excluir movimentação',
@@ -213,18 +269,26 @@ export function LumberyardCreditPage() {
   }
 
   const detailLabel = (row: LumberCreditMovement) => {
-    if (row.movement_type === 'entrada') {
-      const parts: string[] = []
-      if (row.client?.name) parts.push(row.client.name)
-      if (row.order?.number) parts.push(`Pedido #${row.order.number}`)
-      if (row.installment_number && row.installment_total) {
-        parts.push(`Cartão ${formatInstallment(row.installment_number, row.installment_total)}`)
-      }
-      return parts.join(' · ') || 'Entrada de crédito'
+    const text = formatLumberCreditMovementDetail(row)
+    const lines = row.material_lines ?? []
+
+    if (row.movement_type === 'saida' && lines.length > 1) {
+      const client = row.client?.name
+      return (
+        <div className="space-y-1">
+          {client ? <p className="font-medium text-white">{client}</p> : null}
+          <ul className="list-inside list-disc text-xs text-gray-400">
+            {lines.map((line) => (
+              <li key={line.material_id}>
+                {line.name} — {line.quantity} {line.unit} ({formatCurrency(line.amount)})
+              </li>
+            ))}
+          </ul>
+        </div>
+      )
     }
-    const mat = row.material?.name ?? row.material_description
-    const qty = row.quantity ? ` (${row.quantity})` : ''
-    return mat ? `${mat}${qty}` : 'Saída de material'
+
+    return text
   }
 
   return (
@@ -247,16 +311,78 @@ export function LumberyardCreditPage() {
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard title="Total passado (cartão)" value={formatCurrency(stats.totalEntrada)} icon={CreditCard} highlight />
-        <StatCard title="Total utilizado" value={formatCurrency(stats.totalSaida)} icon={TrendingDown} />
-        <StatCard title="Saldo disponível" value={formatCurrency(stats.balance)} icon={Wallet} highlight={stats.balance > 0} />
+        <StatCard title="Total passado (cartão)" value={formatCurrency(stats.totalEntrada)} icon={CreditCard} highlight subtitle={statsSubtitle} />
+        <StatCard title="Total utilizado" value={formatCurrency(stats.totalSaida)} icon={TrendingDown} subtitle={statsSubtitle} />
+        <StatCard title="Saldo disponível" value={formatCurrency(stats.balance)} icon={Wallet} highlight={stats.balance > 0} subtitle={statsSubtitle} />
         <StatCard
           title="Utilização"
           value={stats.totalEntrada > 0 ? `${((stats.totalSaida / stats.totalEntrada) * 100).toFixed(0)}%` : '0%'}
           icon={TrendingUp}
-          subtitle="Do crédito já utilizado"
+          subtitle={filterClient ? statsSubtitle : 'Do crédito já utilizado'}
         />
       </div>
+
+      <Card className="glass-card">
+        <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <CardTitle className="text-base">Saldo por cliente</CardTitle>
+            <p className="text-xs text-gray-500">
+              {allowCrossClient
+                ? 'Saídas podem usar crédito de qualquer cliente (configurável em Configurações)'
+                : 'Cada saída consome apenas o saldo do cliente selecionado'}
+            </p>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {clientBalances.length === 0 ? (
+            <p className="text-sm text-gray-500">Nenhum crédito vinculado a clientes ainda.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[480px] text-sm">
+                <thead>
+                  <tr className="border-b border-white/10 text-left text-xs uppercase tracking-wide text-gray-500">
+                    <th className="px-2 py-2 font-medium">Cliente</th>
+                    <th className="px-2 py-2 font-medium text-right">Passado</th>
+                    <th className="px-2 py-2 font-medium text-right">Utilizado</th>
+                    <th className="px-2 py-2 font-medium text-right">Saldo</th>
+                    {canWrite ? <th className="px-2 py-2 font-medium text-right">Ações</th> : null}
+                  </tr>
+                </thead>
+                <tbody>
+                  {clientBalances.map((row) => (
+                    <tr key={row.client_id} className="border-b border-white/5">
+                      <td className="px-2 py-2 font-medium">{row.client_name}</td>
+                      <td className="px-2 py-2 text-right text-green-400">{formatCurrency(row.total_entrada)}</td>
+                      <td className="px-2 py-2 text-right text-red-400">{formatCurrency(row.total_saida)}</td>
+                      <td className="px-2 py-2 text-right font-semibold text-gold">{formatCurrency(row.balance)}</td>
+                      {canWrite ? (
+                        <td className="px-2 py-2 text-right">
+                          <div className="flex justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setFilterClient(row.client_id)}
+                            >
+                              Ver extrato
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openCreate('saida', row.client_id)}
+                            >
+                              Saída
+                            </Button>
+                          </div>
+                        </td>
+                      ) : null}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card className="glass-card">
         <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -310,14 +436,29 @@ export function LumberyardCreditPage() {
                 ),
               },
               { key: 'detail', header: 'Detalhe', render: (r) => detailLabel(r) },
+              ...(!filterClient ? [{
+                key: 'client',
+                header: 'Cliente',
+                render: (r: LumberCreditMovement) => r.client?.name ?? '—',
+              }] : []),
               {
                 key: 'integration',
                 header: 'Integração',
-                render: (r) => r.purchase?.number ? (
-                  <Link to="/compras" className="text-sm text-gold hover:underline">
-                    Compra #{r.purchase.number}
-                  </Link>
-                ) : r.movement_type === 'saida' ? '—' : null,
+                render: (r) => {
+                  const purchaseNumbers = getLumberCreditPurchaseNumbers(r)
+                  if (purchaseNumbers.length === 0) {
+                    return r.movement_type === 'saida' ? '—' : null
+                  }
+                  return (
+                    <div className="space-y-0.5">
+                      {purchaseNumbers.map((number) => (
+                        <Link key={number} to="/compras" className="block text-sm text-gold hover:underline">
+                          Compra #{number}
+                        </Link>
+                      ))}
+                    </div>
+                  )
+                },
               },
               {
                 key: 'amount',
@@ -330,7 +471,7 @@ export function LumberyardCreditPage() {
               },
               {
                 key: 'balance',
-                header: 'Saldo após',
+                header: filterClient ? 'Saldo do cliente' : 'Saldo após',
                 render: (r) => <span className="font-medium text-gold">{formatCurrency(r.balanceAfter)}</span>,
               },
               { key: 'nf', header: 'NF', render: (r) => r.invoice_number || '—' },
@@ -375,6 +516,11 @@ export function LumberyardCreditPage() {
             orders={orders}
             suppliers={suppliers}
             materials={materials}
+            allowCrossClient={allowCrossClient}
+            clientBalances={clientBalances}
+            onSupplierCreated={() => {
+              void queryClient.invalidateQueries({ queryKey: ['lookups', 'suppliers'] })
+            }}
           />
         </DialogContent>
       </Dialog>
