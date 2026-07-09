@@ -22,6 +22,19 @@ function filenameFromDisposition(header: string | null, fallback: string): strin
   return match?.[1] ?? fallback
 }
 
+async function assertPdfBlob(blob: Blob): Promise<void> {
+  const header = await blob.slice(0, 5).text()
+  if (header.startsWith('%PDF')) return
+
+  if (header.trimStart().startsWith('<!DOCTYPE') || header.trimStart().startsWith('<html')) {
+    throw new Error(
+      'Serviço de PDF não configurado em produção. Defina VITE_PDF_API_URL no Cloudflare apontando para o servidor PDF (Render/Railway).',
+    )
+  }
+
+  throw new Error('Arquivo recebido não é um PDF válido. Verifique o servidor de geração de PDF.')
+}
+
 export async function downloadBudgetProposalPdf(budgetId: string, budgetNumber: number, projectName: string): Promise<void> {
   const { data: { session } } = await supabase.auth.getSession()
   if (!session?.access_token) {
@@ -46,6 +59,7 @@ export async function downloadBudgetProposalPdf(budgetId: string, budgetNumber: 
   }
 
   const blob = await response.blob()
+  await assertPdfBlob(blob)
   const fallback = `proposta_${budgetNumber}_${projectName.replace(/\s+/g, '_').toLowerCase()}.pdf`
   const filename = filenameFromDisposition(response.headers.get('Content-Disposition'), fallback)
   triggerBrowserDownload(blob, filename)

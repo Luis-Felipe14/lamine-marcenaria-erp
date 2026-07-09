@@ -1,0 +1,21 @@
+# Deploy do servidor PDF no Render (https://render.com)
+# 1. Conecte este repositório no Render → New → Blueprint
+# 2. Preencha as variáveis VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY e VITE_APP_URL
+# 3. Copie a URL pública (ex.: https://lamine-pdf.onrender.com) para VITE_PDF_API_URL no Cloudflare
+
+services:
+  - type: web
+    name: lamine-pdf
+    runtime: docker
+    dockerfilePath: ./Dockerfile.pdf
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_ANON_KEY
+        sync: false
+      - key: VITE_APP_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false

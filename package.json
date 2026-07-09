@@ -7,6 +7,7 @@
     "dev": "vite",
     "dev:full": "concurrently -k -n app,pdf -c cyan,magenta \"vite\" \"npm run pdf:server\"",
     "pdf:server": "tsx --tsconfig tsconfig.pdf-server.json --env-file=.env server/pdf-server.ts",
+    "pdf:server:prod": "tsx --tsconfig tsconfig.pdf-server.json server/pdf-server.ts",
     "pdf:install-browser": "puppeteer browsers install chrome",
     "postinstall": "node scripts/ensure-puppeteer-chrome.mjs",
     "build": "tsc -b && vite build",

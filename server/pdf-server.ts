@@ -6,8 +6,23 @@ import { closePdfBrowser, handleBudgetPdfRequest, warmPdfBrowser } from './budge
 const PORT = Number(process.env.PDF_SERVER_PORT ?? 3001)
 const APP_URL = process.env.VITE_APP_URL ?? process.env.APP_URL ?? 'http://localhost:3000'
 
+const corsOrigins = [
+  APP_URL,
+  'http://localhost:3000',
+  ...(process.env.CORS_ORIGINS?.split(',').map((origin) => origin.trim()).filter(Boolean) ?? []),
+]
+
 const app = express()
-app.use(cors({ origin: [APP_URL, 'http://localhost:3000'], credentials: true }))
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || corsOrigins.includes(origin)) {
+      callback(null, true)
+      return
+    }
+    callback(new Error(`CORS bloqueado para origem: ${origin}`))
+  },
+  credentials: true,
+}))
 app.use(express.json({ limit: '1mb' }))
 
 app.get('/health', (_req, res) => {
