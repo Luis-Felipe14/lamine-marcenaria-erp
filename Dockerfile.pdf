@@ -1,4 +1,4 @@
-# Servidor PDF (Puppeteer)  deploy separado do frontend Cloudflare
+# Servidor PDF (Puppeteer) - deploy separado do frontend Cloudflare
 FROM node:20-bookworm-slim
 
 RUN apt-get update && apt-get install -y \
@@ -11,16 +11,20 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-COPY package.json package-lock.json ./
-RUN npm ci
-
-COPY . .
-
 ENV NODE_ENV=production
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-ENV PDF_SERVER_PORT=3001
+ENV SKIP_PUPPETEER_INSTALL=true
 
-EXPOSE 3001
+COPY package.json package-lock.json ./
+RUN npm ci --ignore-scripts
+
+COPY server ./server
+COPY src/pdf ./src/pdf
+COPY src/lib ./src/lib
+COPY public ./public
+COPY tsconfig.pdf-server.json ./
+
+EXPOSE 10000
 
 CMD ["npm", "run", "pdf:server:prod"]

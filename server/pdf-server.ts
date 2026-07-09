@@ -3,7 +3,8 @@ import express from 'express'
 import cors from 'cors'
 import { closePdfBrowser, handleBudgetPdfRequest, warmPdfBrowser } from './budget-pdf-handler.ts'
 
-const PORT = Number(process.env.PDF_SERVER_PORT ?? 3001)
+const HOST = process.env.HOST ?? '0.0.0.0'
+const PORT = Number(process.env.PORT ?? process.env.PDF_SERVER_PORT ?? 3001)
 const APP_URL = process.env.VITE_APP_URL ?? process.env.APP_URL ?? 'http://localhost:3000'
 
 const corsOrigins = [
@@ -49,9 +50,8 @@ server.on('error', (error: NodeJS.ErrnoException) => {
   process.exit(1)
 })
 
-server.listen(PORT, () => {
-  console.log(`PDF server rodando em http://localhost:${PORT}`)
-  console.log('Mantenha este terminal aberto. Pressione Ctrl+C para encerrar.')
+server.listen(PORT, HOST, () => {
+  console.log(`PDF server rodando em http://${HOST}:${PORT}`)
   void warmPdfBrowser()
 })
 

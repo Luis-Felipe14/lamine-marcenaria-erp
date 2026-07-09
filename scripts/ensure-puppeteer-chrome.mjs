@@ -2,6 +2,11 @@ import { existsSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import puppeteer from 'puppeteer'
 
+if (process.env.SKIP_PUPPETEER_INSTALL === 'true' || process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD === 'true') {
+  console.log('[puppeteer] Instalação do Chrome ignorada (usando Chromium do sistema)')
+  process.exit(0)
+}
+
 const executable = puppeteer.executablePath()
 
 if (executable && existsSync(executable)) {

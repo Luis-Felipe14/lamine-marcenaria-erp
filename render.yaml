@@ -10,6 +10,7 @@ services:
     dockerfilePath: ./Dockerfile.pdf
     plan: free
     healthCheckPath: /health
+    healthCheckGracePeriod: 300
     envVars:
       - key: VITE_SUPABASE_URL
         sync: false
