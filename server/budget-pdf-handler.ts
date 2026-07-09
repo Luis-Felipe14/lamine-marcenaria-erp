@@ -3,6 +3,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createClient } from '@supabase/supabase-js'
 import puppeteer, { type Browser } from 'puppeteer'
+import ws from 'ws'
 import { loadBudgetProposalData } from '../src/pdf/load-budget-proposal.ts'
 import { renderProposalHtml } from '../src/pdf/render-proposal-html.tsx'
 import { embedProposalRemoteImages } from './pdf-image-embed.ts'
@@ -50,6 +51,9 @@ function createAuthedSupabase(accessToken: string) {
     auth: {
       persistSession: false,
       autoRefreshToken: false,
+    },
+    realtime: {
+      transport: ws,
     },
   })
 }
