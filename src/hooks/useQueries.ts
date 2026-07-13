@@ -54,6 +54,7 @@ export function useExecutiveMetrics() {
   return useQuery({
     queryKey: queryKeys.executiveMetrics,
     queryFn: getExecutiveMetrics,
+    staleTime: 180_000,
   })
 }
 
@@ -62,6 +63,7 @@ export function useFinancialChart(months = 6, enabled = true) {
     queryKey: queryKeys.financialChart(months),
     queryFn: () => getFinancialChart(months),
     enabled,
+    staleTime: 180_000,
   })
 }
 
@@ -69,6 +71,7 @@ export function useCommercialMetrics() {
   return useQuery({
     queryKey: queryKeys.commercialMetrics,
     queryFn: getCommercialMetrics,
+    staleTime: 180_000,
   })
 }
 
@@ -79,6 +82,7 @@ export function useOperationalMetrics() {
   return useQuery({
     queryKey: [...queryKeys.operationalMetrics, includeLumberCredit],
     queryFn: () => getOperationalMetrics({ includeLumberCredit }),
+    staleTime: 180_000,
   })
 }
 
@@ -86,6 +90,7 @@ export function useFinancialDashboardMetrics() {
   return useQuery({
     queryKey: queryKeys.financialDashboard,
     queryFn: getFinancialDashboardMetrics,
+    staleTime: 180_000,
   })
 }
 
@@ -93,6 +98,7 @@ export function useHeaderMetrics() {
   return useQuery({
     queryKey: queryKeys.headerMetrics,
     queryFn: getGlobalHeaderMetrics,
+    staleTime: 120_000,
   })
 }
 
@@ -108,6 +114,7 @@ export function useRecentActivities(limit = 8) {
   return useQuery({
     queryKey: queryKeys.recentActivities(limit),
     queryFn: () => getRecentActivities(limit),
+    staleTime: 60_000,
   })
 }
 
@@ -123,6 +130,7 @@ export function useFinancialSummary() {
   return useQuery({
     queryKey: queryKeys.financialSummary,
     queryFn: getFinancialSummary,
+    staleTime: 120_000,
   })
 }
 

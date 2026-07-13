@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { memo, useMemo, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 
 export interface KanbanColumn<T> {
@@ -15,7 +15,7 @@ interface KanbanBoardProps<T extends { id: string }> {
   onStatusChange?: (itemId: string, newStatus: string, oldStatus: string) => void
 }
 
-export function KanbanBoard<T extends { id: string; status?: string }>({
+function KanbanBoardInner<T extends { id: string; status?: string }>({
   columns,
   renderCard,
   onCardClick,
@@ -34,7 +34,10 @@ export function KanbanBoard<T extends { id: string; status?: string }>({
     setDropTarget(null)
   }
 
-  const totalItems = columns.reduce((sum, c) => sum + c.items.length, 0)
+  const totalItems = useMemo(
+    () => columns.reduce((sum, c) => sum + c.items.length, 0),
+    [columns],
+  )
 
   return (
     <div className="space-y-3">
@@ -116,3 +119,5 @@ export function KanbanBoard<T extends { id: string; status?: string }>({
     </div>
   )
 }
+
+export const KanbanBoard = memo(KanbanBoardInner) as typeof KanbanBoardInner

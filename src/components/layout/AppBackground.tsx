@@ -49,10 +49,6 @@ function AppBackgroundLayers({ photoMode }: { photoMode: boolean }) {
     }
 
     function animate() {
-      if (document.hidden) {
-        animationId = requestAnimationFrame(animate)
-        return
-      }
       ctx!.clearRect(0, 0, window.innerWidth, window.innerHeight)
       particles.forEach((p) => {
         p.x += p.speedX
@@ -83,9 +79,20 @@ function AppBackgroundLayers({ photoMode }: { photoMode: boolean }) {
     }
     window.addEventListener('resize', onResize)
 
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        cancelAnimationFrame(animationId)
+        animationId = 0
+      } else if (!animationId) {
+        animate()
+      }
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+
     return () => {
       cancelAnimationFrame(animationId)
       window.removeEventListener('resize', onResize)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
     }
   }, [])
 
