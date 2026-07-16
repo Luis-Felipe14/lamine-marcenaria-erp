@@ -14,8 +14,8 @@
     "generate:pwa-icons": "node scripts/generate-pwa-icons.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
-    "deploy:cloudflare": "npx wrangler deploy --assets=./dist",
-    "deploy:cloudflare:preview": "npx wrangler versions upload --assets=./dist"
+    "deploy:cloudflare": "npx wrangler deploy",
+    "deploy:cloudflare:preview": "npx wrangler versions upload"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",

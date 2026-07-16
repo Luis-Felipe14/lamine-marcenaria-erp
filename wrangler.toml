@@ -1,9 +1,15 @@
-# Cloudflare Workers (static assets) — Laminê ERP
-# Deploy no CI: npx wrangler deploy
+# Cloudflare Workers (static assets + proxy PDF) — Laminê ERP
+# Deploy: npm run build && npx wrangler deploy
 
 name = "lamine-marcenaria-erp"
+main = "workers/pdf-proxy.ts"
 compatibility_date = "2024-08-01"
 
 [assets]
 directory = "./dist"
+binding = "ASSETS"
 not_found_handling = "single-page-application"
+run_worker_first = ["/api/pdf/*"]
+
+[vars]
+PDF_UPSTREAM_URL = "https://lamine-pdf.onrender.com"

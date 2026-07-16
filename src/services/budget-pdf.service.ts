@@ -1,6 +1,11 @@
 import { supabase } from '@/lib/supabase'
 
-const PDF_API_BASE = import.meta.env.VITE_PDF_API_URL ?? ''
+/**
+ * Em produção o Worker Cloudflare faz proxy de /api/pdf → Render (same-origin, sem CORS).
+ * Em desenvolvimento o Vite faz proxy para localhost:3001.
+ * VITE_PDF_DIRECT_URL só se precisar chamar o Render direto (não recomendado).
+ */
+const PDF_API_BASE = import.meta.env.VITE_PDF_DIRECT_URL ?? ''
 
 function buildPdfUrl(budgetId: string): string {
   const path = `/api/pdf/budget/${budgetId}`
@@ -28,22 +33,11 @@ async function assertPdfBlob(blob: Blob): Promise<void> {
 
   if (header.trimStart().startsWith('<!DOCTYPE') || header.trimStart().startsWith('<html')) {
     throw new Error(
-      'Serviço de PDF não configurado em produção. Defina VITE_PDF_API_URL no Cloudflare apontando para o servidor PDF (Render/Railway).',
+      'Serviço de PDF não respondeu corretamente. Verifique o proxy /api/pdf no Cloudflare e o servidor no Render.',
     )
   }
 
   throw new Error('Arquivo recebido não é um PDF válido. Verifique o servidor de geração de PDF.')
-}
-
-/** Acorda o Render free (cold start) sem depender de CORS legível. */
-async function wakePdfServerIfRemote(): Promise<void> {
-  if (!PDF_API_BASE) return
-  const healthUrl = `${PDF_API_BASE.replace(/\/$/, '')}/health`
-  try {
-    await fetch(healthUrl, { mode: 'no-cors', cache: 'no-store' })
-  } catch {
-    // ignore — o objetivo é só disparar a requisição de wake
-  }
 }
 
 async function fetchBudgetPdf(budgetId: string, accessToken: string): Promise<Response> {
@@ -53,9 +47,8 @@ async function fetchBudgetPdf(budgetId: string, accessToken: string): Promise<Re
   try {
     return await fetch(url, { headers })
   } catch (firstError) {
-    // Plano free do Render: preflight falha enquanto o serviço acorda
-    await wakePdfServerIfRemote()
-    await new Promise((resolve) => setTimeout(resolve, 2500))
+    // Render free pode estar acordando — uma nova tentativa após breve espera
+    await new Promise((resolve) => setTimeout(resolve, 3000))
     try {
       return await fetch(url, { headers })
     } catch {
@@ -71,9 +64,6 @@ export async function downloadBudgetProposalPdf(budgetId: string, budgetNumber: 
   if (!session?.access_token) {
     throw new Error('Sessão expirada. Faça login novamente.')
   }
-
-  // Acorda o Render free antes do preflight autenticado (evita falha de CORS no cold start)
-  await wakePdfServerIfRemote()
 
   let response: Response
   try {

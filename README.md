@@ -135,8 +135,8 @@ O frontend é uma SPA estática (Vite + React). O backend continua no **Supabase
 | **Framework preset** | Vite |
 | **Build command** | `npm run build` |
 | **Build output directory** | `dist` |
-| **Deploy command** | `npx wrangler deploy --assets=./dist` |
-| **Non-production branch deploy command** | `npx wrangler versions upload --assets=./dist` |
+| **Deploy command** | `npx wrangler deploy` |
+| **Non-production branch deploy command** | `npx wrangler versions upload` |
 | **Node version** | `20` |
 
 > Projeto no Cloudflare é **Workers** (não Pages clássico). O `wrangler.toml` publica `./dist` com roteamento SPA.
