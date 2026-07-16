@@ -1,19 +1,32 @@
 import { supabase } from '@/lib/supabase'
 
 /**
- * Em produção o Worker Cloudflare faz proxy de /api/pdf → Render (same-origin, sem CORS).
- * Em desenvolvimento o Vite faz proxy para localhost:3001.
- * VITE_PDF_DIRECT_URL só se precisar chamar o Render direto (não recomendado).
+ * PDF longo vai direto ao Render (evita timeout/502 do Worker Cloudflare).
+ * O health usa o proxy same-origin só para acordar o Render free.
+ *
+ * Dev: Vite proxy em /api/pdf → localhost:3001 (PDF_API_BASE vazio).
+ * Prod: PDF em https://lamine-pdf.onrender.com; health em /api/pdf/health.
  */
-const PDF_API_BASE = import.meta.env.VITE_PDF_DIRECT_URL ?? ''
+const PDF_DIRECT_URL = (import.meta.env.VITE_PDF_DIRECT_URL as string | undefined)?.replace(/\/$/, '') ?? ''
+const PDF_UPSTREAM_DEFAULT = 'https://lamine-pdf.onrender.com'
+
+function pdfApiBase(): string {
+  if (PDF_DIRECT_URL) return PDF_DIRECT_URL
+  if (import.meta.env.DEV) return ''
+  return PDF_UPSTREAM_DEFAULT
+}
 
 function buildPdfUrl(budgetId: string): string {
   const path = `/api/pdf/budget/${budgetId}`
-  return PDF_API_BASE ? `${PDF_API_BASE.replace(/\/$/, '')}${path}` : path
+  const base = pdfApiBase()
+  return base ? `${base}${path}` : path
 }
 
 function buildHealthUrl(): string {
-  return PDF_API_BASE ? `${PDF_API_BASE.replace(/\/$/, '')}/health` : '/api/pdf/health'
+  // Em produção preferimos o proxy Cloudflare (mesmo domínio) só para o wake.
+  if (import.meta.env.PROD && !PDF_DIRECT_URL) return '/api/pdf/health'
+  const base = pdfApiBase()
+  return base ? `${base}/health` : '/api/pdf/health'
 }
 
 function triggerBrowserDownload(blob: Blob, filename: string) {
@@ -37,7 +50,7 @@ async function assertPdfBlob(blob: Blob): Promise<void> {
 
   if (header.trimStart().startsWith('<!DOCTYPE') || header.trimStart().startsWith('<html')) {
     throw new Error(
-      'Serviço de PDF não respondeu corretamente. Verifique o proxy /api/pdf no Cloudflare e o servidor no Render.',
+      'Serviço de PDF não respondeu corretamente. Verifique o servidor no Render (lamine-pdf).',
     )
   }
 
@@ -48,17 +61,17 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-/** Aguarda o Render free acordar via proxy same-origin (evita 502 no Worker). */
+/** Aguarda o Render free acordar antes da geração (Puppeteer). */
 async function ensurePdfServerAwake(): Promise<void> {
   const healthUrl = buildHealthUrl()
-  const deadline = Date.now() + 55_000
+  const deadline = Date.now() + 60_000
 
   while (Date.now() < deadline) {
     try {
       const response = await fetch(healthUrl, { cache: 'no-store' })
       if (response.ok) return
     } catch {
-      // Render ainda acordando ou rede instável
+      // ainda acordando
     }
     await sleep(2500)
   }
@@ -105,7 +118,9 @@ export async function downloadBudgetProposalPdf(budgetId: string, budgetNumber: 
       const body = await response.json() as { error?: string }
       if (body.error) message = body.error
     } catch {
-      // ignore
+      if (response.status === 502) {
+        message = 'Servidor de PDF indisponível (502). Aguarde alguns segundos e tente novamente.'
+      }
     }
     throw new Error(message)
   }
