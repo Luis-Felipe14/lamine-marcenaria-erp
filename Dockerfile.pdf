@@ -17,17 +17,20 @@ ENV SKIP_PUPPETEER_INSTALL=true
 ENV NODE_OPTIONS=--max-old-space-size=192
 
 COPY package.json package-lock.json ./
-RUN npm ci
+# ignore-scripts: evita download do Chrome do Puppeteer; sharp usa binario prebuild
+RUN npm ci --ignore-scripts \
+  && npm rebuild sharp --foreground-scripts || echo "[pdf] sharp rebuild skipped"
 
 COPY server ./server
 COPY src/pdf ./src/pdf
 COPY src/lib ./src/lib
 COPY tsconfig.pdf-server.json ./
 
-# Assets otimizados para PDF (logo ~25KB + header ~36KB) — visual preservado
-COPY public/pdf ./public/pdf
-COPY public/lamine-logo.svg public/lamine-monogram.svg ./public/
-COPY public/lamine-background.png ./public/
+RUN mkdir -p public/pdf public/login
+
+# Assets otimizados para PDF (logo ~25KB + header ~36KB)
+COPY public/pdf/ ./public/pdf/
+COPY public/lamine-logo.svg public/lamine-monogram.svg public/lamine-background.png ./public/
 COPY public/login/slide-1.svg ./public/login/
 
 EXPOSE 10000

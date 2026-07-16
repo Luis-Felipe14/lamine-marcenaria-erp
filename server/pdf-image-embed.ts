@@ -1,11 +1,22 @@
-import sharp from 'sharp'
 import type { BudgetProposalData } from '../src/pdf/types.ts'
 
-/** Fotos de ambiente comprimidas para o PDF (qualidade visual ok, RAM baixa). */
+const MAX_REMOTE_IMAGE_BYTES = 450_000
 const MAX_WIDTH = 900
 const JPEG_QUALITY = 72
 
-async function urlToCompressedDataUrl(url: string): Promise<string | undefined> {
+type SharpFactory = typeof import('sharp')
+
+async function loadSharp(): Promise<SharpFactory | null> {
+  try {
+    const mod = await import('sharp')
+    return mod.default as unknown as SharpFactory
+  } catch (error) {
+    console.warn('[pdf] sharp indisponível — usando imagens sem redimensionar:', error)
+    return null
+  }
+}
+
+async function urlToDataUrl(url: string): Promise<string | undefined> {
   if (url.startsWith('data:')) return url
 
   try {
@@ -15,20 +26,30 @@ async function urlToCompressedDataUrl(url: string): Promise<string | undefined> 
     const input = Buffer.from(await response.arrayBuffer())
     if (input.length === 0) return undefined
 
-    const output = await sharp(input)
-      .rotate()
-      .resize({ width: MAX_WIDTH, withoutEnlargement: true })
-      .jpeg({ quality: JPEG_QUALITY, mozjpeg: true })
-      .toBuffer()
+    const sharp = await loadSharp()
+    if (sharp) {
+      const output = await sharp(input)
+        .rotate()
+        .resize({ width: MAX_WIDTH, withoutEnlargement: true })
+        .jpeg({ quality: JPEG_QUALITY, mozjpeg: true })
+        .toBuffer()
+      return `data:image/jpeg;base64,${output.toString('base64')}`
+    }
 
-    return `data:image/jpeg;base64,${output.toString('base64')}`
+    if (input.length > MAX_REMOTE_IMAGE_BYTES) {
+      console.warn(`[pdf] Imagem remota ignorada (${input.length} bytes): ${url}`)
+      return undefined
+    }
+
+    const mime = response.headers.get('content-type')?.split(';')[0] || 'image/jpeg'
+    return `data:${mime};base64,${input.toString('base64')}`
   } catch (error) {
-    console.warn('[pdf] Falha ao comprimir imagem remota:', url, error)
+    console.warn('[pdf] Falha ao embutir imagem remota:', url, error)
     return undefined
   }
 }
 
-/** Converte URLs remotas em JPEG leve (data URL) para o Puppeteer renderizar offline. */
+/** Converte URLs remotas em data URL leve para o Puppeteer renderizar offline. */
 export async function embedProposalRemoteImages(data: BudgetProposalData): Promise<void> {
   const uniqueUrls = [...new Set(
     data.environments
@@ -39,7 +60,7 @@ export async function embedProposalRemoteImages(data: BudgetProposalData): Promi
   if (uniqueUrls.length === 0) return
 
   const embedded = await Promise.all(
-    uniqueUrls.map(async (url) => ({ url, dataUrl: await urlToCompressedDataUrl(url) })),
+    uniqueUrls.map(async (url) => ({ url, dataUrl: await urlToDataUrl(url) })),
   )
 
   const map = new Map(
