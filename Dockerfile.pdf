@@ -14,10 +14,10 @@ ENV NODE_ENV=production
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV SKIP_PUPPETEER_INSTALL=true
-ENV NODE_OPTIONS=--max-old-space-size=192
+# Heap do Node (Chromium e processo separado). 192 era baixo demais e atrasava o boot.
+ENV NODE_OPTIONS=--max-old-space-size=256
 
 COPY package.json package-lock.json ./
-# ignore-scripts: evita download do Chrome do Puppeteer; sharp usa binario prebuild
 RUN npm ci --ignore-scripts \
   && npm rebuild sharp --foreground-scripts || echo "[pdf] sharp rebuild skipped"
 
@@ -28,7 +28,6 @@ COPY tsconfig.pdf-server.json ./
 
 RUN mkdir -p public/pdf public/login
 
-# Assets otimizados para PDF (logo ~25KB + header ~36KB)
 COPY public/pdf/ ./public/pdf/
 COPY public/lamine-logo.svg public/lamine-monogram.svg public/lamine-background.png ./public/
 COPY public/login/slide-1.svg ./public/login/
