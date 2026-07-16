@@ -7,20 +7,29 @@ const HOST = process.env.HOST ?? '0.0.0.0'
 const PORT = Number(process.env.PORT ?? process.env.PDF_SERVER_PORT ?? 3001)
 const APP_URL = process.env.VITE_APP_URL ?? process.env.APP_URL ?? 'http://localhost:3000'
 
+function normalizeOrigin(value: string): string {
+  return value.trim().replace(/\/$/, '')
+}
+
 const corsOrigins = [
   APP_URL,
   'http://localhost:3000',
-  ...(process.env.CORS_ORIGINS?.split(',').map((origin) => origin.trim()).filter(Boolean) ?? []),
+  // Origem de produção (fallback se VITE_APP_URL/CORS_ORIGINS estiver ausente ou com barra final)
+  'https://lamine-marcenaria-erp.eliustech.workers.dev',
+  ...(process.env.CORS_ORIGINS?.split(',') ?? []),
 ]
+  .map(normalizeOrigin)
+  .filter(Boolean)
 
 const app = express()
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || corsOrigins.includes(origin)) {
+    if (!origin || corsOrigins.includes(normalizeOrigin(origin))) {
       callback(null, true)
       return
     }
-    callback(new Error(`CORS bloqueado para origem: ${origin}`))
+    console.warn(`[pdf] CORS bloqueado para origem: ${origin}. Permitidas: ${corsOrigins.join(', ')}`)
+    callback(null, false)
   },
   credentials: true,
 }))
@@ -52,6 +61,7 @@ server.on('error', (error: NodeJS.ErrnoException) => {
 
 server.listen(PORT, HOST, () => {
   console.log(`PDF server rodando em http://${HOST}:${PORT}`)
+  console.log(`[pdf] CORS origins: ${corsOrigins.join(', ')}`)
   void warmPdfBrowser()
 })
 
