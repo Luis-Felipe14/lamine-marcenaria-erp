@@ -15,7 +15,7 @@ import {
   getRecentActivities,
   getNotifications,
 } from '@/services/dashboard.service'
-import { getFinancialSummary, listFinancialTransactions } from '@/services/financial.service'
+import { getFinancialSummary, getFinancialSettings, listFinancialTransactions } from '@/services/financial.service'
 import {
   computeLumberCreditStats,
   getLumberCreditSettings,
@@ -131,6 +131,14 @@ export function useFinancialSummary() {
     queryKey: queryKeys.financialSummary,
     queryFn: getFinancialSummary,
     staleTime: 120_000,
+  })
+}
+
+export function useFinancialSettings() {
+  return useQuery({
+    queryKey: queryKeys.financialSettings,
+    queryFn: getFinancialSettings,
+    staleTime: 60_000,
   })
 }
 

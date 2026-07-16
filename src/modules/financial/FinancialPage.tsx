@@ -28,6 +28,7 @@ import { createRecord, updateRecord, softDelete } from '@/services/api'
 import type { FinancialTransaction } from '@/services/financial.service'
 import {
   useFinancialSummary,
+  useFinancialSettings,
   useFinancialTransactions,
   useLookupClients,
   useLookupOrders,
@@ -37,12 +38,15 @@ import {
 } from '@/hooks/useQueries'
 import { FinancialTransactionForm } from '@/modules/financial/FinancialTransactionForm'
 import { useConfirm } from '@/hooks/useConfirm'
+import { useAuthStore } from '@/stores/authStore'
+import { normalizeRole } from '@/lib/permissions'
 
 interface Transaction extends FinancialTransaction {}
 
 export function FinancialPage() {
   const queryClient = useQueryClient()
   const { confirm, dialogProps } = useConfirm()
+  const roleName = useAuthStore((s) => s.profile?.role?.name)
   const [filter, setFilter] = useState<'all' | 'receita' | 'despesa'>('all')
   const [page, setPage] = useState(1)
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -52,6 +56,7 @@ export function FinancialPage() {
 
   const { data: txResult, isLoading, isFetching } = useFinancialTransactions(page, filter)
   const { data: summary = { receitas: 0, despesas: 0, aPagar: 0, aReceber: 0 } } = useFinancialSummary()
+  const { data: financialSettings } = useFinancialSettings()
   const { data: clients = [] } = useLookupClients()
   const { data: orders = [] } = useLookupOrders()
   const { data: purchases = [] } = useLookupPurchases()
@@ -60,6 +65,8 @@ export function FinancialPage() {
 
   const transactions = txResult?.data ?? []
   const totalPages = txResult?.totalPages ?? 1
+  const isSecretary = normalizeRole(roleName) === 'secretaria'
+  const showFinancialSummary = !isSecretary || Boolean(financialSettings?.secretary_can_view_summary)
 
   useEffect(() => {
     setPage(1)
@@ -112,6 +119,18 @@ export function FinancialPage() {
       return
     }
 
+    if (!editing && form.type === 'receita' && form.category === 'sinal') {
+      const order = orders.find((o) => o.id === form.order_id)
+      if (!order) {
+        toast.error('Selecione o pedido para calcular o saldo a receber')
+        return
+      }
+      if (Number(form.amount) > order.value) {
+        toast.error('O valor do sinal não pode ser maior que o valor do pedido')
+        return
+      }
+    }
+
     setSubmitting(true)
     try {
       const selectedEmployee = employees.find((e) => e.id === form.employee_id)
@@ -121,7 +140,41 @@ export function FinancialPage() {
         toast.success('Lançamento atualizado!')
       } else {
         await createRecord('financial_transactions', { ...payload, is_paid: false })
-        toast.success('Lançamento criado!')
+
+        let remainingCreated = false
+        if (form.type === 'receita' && form.category === 'sinal' && form.order_id) {
+          const order = orders.find((o) => o.id === form.order_id)
+          if (order) {
+            const remaining = Math.round((order.value - Number(form.amount)) * 100) / 100
+            if (remaining > 0) {
+              await createRecord('financial_transactions', {
+                type: 'receita',
+                category: 'pedido',
+                description: `Saldo restante — Pedido #${order.number}`,
+                amount: remaining,
+                due_date: form.due_date || null,
+                client_id: form.client_id || null,
+                order_id: form.order_id,
+                payment_method: null,
+                notes: 'Gerado automaticamente a partir do lançamento de sinal',
+                is_paid: false,
+                document_number: null,
+                installment_number: null,
+                installment_total: null,
+                purchase_id: null,
+                supplier_id: null,
+                employee_id: null,
+              })
+              remainingCreated = true
+            }
+          }
+        }
+
+        toast.success(
+          remainingCreated
+            ? 'Sinal lançado e saldo restante enviado para A Receber!'
+            : 'Lançamento criado!',
+        )
       }
       setDialogOpen(false)
       setEditing(null)
@@ -211,14 +264,16 @@ export function FinancialPage() {
         }
       />
 
-      <PageKpiZone label="Resumo financeiro">
-        <StatGrid strip>
-          <StatCard title="Receitas Pagas" value={formatCurrency(summary.receitas)} icon={TrendingUp} subtitle="Entradas confirmadas" />
-          <StatCard title="Despesas Pagas" value={formatCurrency(summary.despesas)} icon={TrendingDown} subtitle="Saídas confirmadas" />
-          <StatCard title="A Receber" value={formatCurrency(summary.aReceber)} icon={TrendingUp} subtitle="Pendente de recebimento" />
-          <StatCard title="A Pagar" value={formatCurrency(summary.aPagar)} icon={TrendingDown} subtitle="Pendente de pagamento" />
-        </StatGrid>
-      </PageKpiZone>
+      {showFinancialSummary && (
+        <PageKpiZone label="Resumo financeiro">
+          <StatGrid strip>
+            <StatCard title="Receitas Pagas" value={formatCurrency(summary.receitas)} icon={TrendingUp} subtitle="Entradas confirmadas" />
+            <StatCard title="Despesas Pagas" value={formatCurrency(summary.despesas)} icon={TrendingDown} subtitle="Saídas confirmadas" />
+            <StatCard title="A Receber" value={formatCurrency(summary.aReceber)} icon={TrendingUp} subtitle="Pendente de recebimento" />
+            <StatCard title="A Pagar" value={formatCurrency(summary.aPagar)} icon={TrendingDown} subtitle="Pendente de pagamento" />
+          </StatGrid>
+        </PageKpiZone>
+      )}
 
       <TableToolbar panel zoneLabel="Filtros">
         <div className="flex gap-1">
@@ -238,7 +293,7 @@ export function FinancialPage() {
           { key: 'link', header: 'Vínculo', render: (r) => <span className="text-xs text-gray-400">{linkLabel(r)}</span> },
           { key: 'category', header: 'Categoria', render: (r) => getFinancialCategoryLabel(r.category) },
           { key: 'document_number', header: 'NF', render: (r) => r.document_number || '—' },
-          { key: 'installment', header: 'Parcela', render: (r) => formatInstallment(r.installment_number, r.installment_total) },
+          { key: 'installment', header: 'Parcelas', render: (r) => formatInstallment(r.installment_number, r.installment_total) },
           { key: 'payment_method', header: 'Pagamento', render: (r) => getPaymentMethodLabel(r.payment_method) },
           { key: 'amount', header: 'Valor', render: (r) => formatCurrency(r.amount) },
           { key: 'due_date', header: 'Vencimento', render: (r) => formatDate(r.due_date) },

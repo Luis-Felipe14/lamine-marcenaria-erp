@@ -106,6 +106,17 @@ export function FinancialTransactionForm({
       || fields.installment_total.visible
     )
 
+  const sinalRemainingHint = useMemo(() => {
+    if (form.type !== 'receita' || form.category !== 'sinal' || !form.order_id) return null
+    const order = orders.find((o) => o.id === form.order_id)
+    if (!order || !form.amount || form.amount <= 0) return null
+    const remaining = Math.round((order.value - Number(form.amount)) * 100) / 100
+    if (remaining <= 0) {
+      return 'Valor cobre o pedido — nenhum saldo será lançado em A Receber'
+    }
+    return `Saldo a receber: ${formatCurrency(remaining)} (pedido ${formatCurrency(order.value)} − sinal)`
+  }, [form.type, form.category, form.order_id, form.amount, orders])
+
   const patchForm = (patch: Partial<FinancialFormState>) => {
     setForm((current) => applyFinancialFormContextChange(current, patch))
   }
@@ -211,7 +222,8 @@ export function FinancialTransactionForm({
                     order_id,
                     client_id: order ? order.client_id : form.client_id,
                   }
-                  if (order && !form.amount) {
+                  // Sinal: valor é a entrada; não preencher com o total do pedido.
+                  if (order && !form.amount && form.category !== 'sinal') {
                     patch.amount = order.value
                   }
                   patchForm(patch)
@@ -340,6 +352,7 @@ export function FinancialTransactionForm({
             {fields.employee_id.visible && (
               <FieldHint text="Preenchido com o salário cadastrado — altere se houver bonificação ou desconto" />
             )}
+            {sinalRemainingHint && <FieldHint text={sinalRemainingHint} />}
           </div>
           {fields.due_date.visible && (
             <div>
@@ -396,7 +409,7 @@ export function FinancialTransactionForm({
             )}
 
             {(fields.installment_number.visible || fields.installment_total.visible) && (
-              <div className="grid grid-cols-2 gap-4">
+              <div className={fields.installment_number.visible && fields.installment_total.visible ? 'grid grid-cols-2 gap-4' : undefined}>
                 {fields.installment_number.visible && (
                   <div>
                     <Label>
@@ -424,13 +437,14 @@ export function FinancialTransactionForm({
                     <Input
                       type="number"
                       min={1}
-                      placeholder="Ex.: 3"
+                      placeholder="Ex.: 12"
                       value={form.installment_total}
                       onChange={(e) => setForm({
                         ...form,
                         installment_total: e.target.value === '' ? '' : Number(e.target.value),
                       })}
                     />
+                    <FieldHint text={fields.installment_total.hint} />
                   </div>
                 )}
               </div>

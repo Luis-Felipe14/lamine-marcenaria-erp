@@ -10,6 +10,7 @@ export const queryKeys = {
   notifications: (userId: string) => ['layout', 'notifications', userId] as const,
   criticalStockCount: ['metrics', 'critical-stock'] as const,
   financialSummary: ['financial', 'summary'] as const,
+  financialSettings: ['financial', 'settings'] as const,
   financialTransactions: (page: number, filter: string) => ['financial', 'transactions', page, filter] as const,
   lumberCreditStats: ['lumber-credit', 'stats'] as const,
   lumberCreditAllMovements: ['lumber-credit', 'all-movements'] as const,

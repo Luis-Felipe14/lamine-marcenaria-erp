@@ -31,6 +31,7 @@ import {
 } from '@/services/material-categories.service'
 import { useMaterialCategories, useInvalidateMaterialCategories } from '@/hooks/useMaterialCategories'
 import { saveLumberCreditSettings } from '@/services/lumberyard-credit.service'
+import { saveFinancialSettings } from '@/services/financial.service'
 import { useAuthStore } from '@/stores/authStore'
 import { useConfirm } from '@/hooks/useConfirm'
 import type { UserRole } from '@/types'
@@ -78,6 +79,7 @@ export function SettingsPage() {
   const [monthlyGoal, setMonthlyGoal] = useState(50000)
   const [goalEnabled, setGoalEnabled] = useState(false)
   const [allowCrossClientCredit, setAllowCrossClientCredit] = useState(false)
+  const [secretaryCanViewSummary, setSecretaryCanViewSummary] = useState(false)
   const [loading, setLoading] = useState(true)
   const [savingUserId, setSavingUserId] = useState<string | null>(null)
   const [passwordDrafts, setPasswordDrafts] = useState<Record<string, string>>({})
@@ -124,10 +126,11 @@ export function SettingsPage() {
 
   useEffect(() => {
     async function load() {
-      const [{ data: settings }, { data: goals }, { data: lumberCredit }] = await Promise.all([
+      const [{ data: settings }, { data: goals }, { data: lumberCredit }, { data: financial }] = await Promise.all([
         supabase.from('settings').select('*').eq('key', 'company').single(),
         supabase.from('settings').select('*').eq('key', 'goals').maybeSingle(),
         supabase.from('settings').select('*').eq('key', 'lumber_credit').maybeSingle(),
+        supabase.from('settings').select('*').eq('key', 'financial').maybeSingle(),
       ])
       if (settings?.value) setCompany(settings.value as CompanySettings)
       const goalsVal = goals?.value as {
@@ -139,6 +142,9 @@ export function SettingsPage() {
 
       const lumberVal = lumberCredit?.value as { allow_cross_client?: boolean } | undefined
       setAllowCrossClientCredit(lumberVal?.allow_cross_client ?? false)
+
+      const financialVal = financial?.value as { secretary_can_view_summary?: boolean } | undefined
+      setSecretaryCanViewSummary(financialVal?.secretary_can_view_summary ?? false)
 
       await loadUsers()
       setLoading(false)
@@ -170,6 +176,16 @@ export function SettingsPage() {
       await saveLumberCreditSettings({ allow_cross_client: allowCrossClientCredit })
       await queryClient.invalidateQueries({ queryKey: ['lumber-credit'] })
       toast.success('Configurações do crédito madereira salvas!')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao salvar configurações')
+    }
+  }
+
+  const saveFinancial = async () => {
+    try {
+      await saveFinancialSettings({ secretary_can_view_summary: secretaryCanViewSummary })
+      await queryClient.invalidateQueries({ queryKey: ['financial'] })
+      toast.success('Configurações financeiras salvas!')
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao salvar configurações')
     }
@@ -324,6 +340,7 @@ export function SettingsPage() {
         <TabsList className="mb-6">
           <TabsTrigger value="company">Empresa</TabsTrigger>
           <TabsTrigger value="goals">Metas</TabsTrigger>
+          {canEditCategories && <TabsTrigger value="financial">Financeiro</TabsTrigger>}
           {canEditCategories && <TabsTrigger value="lumber-credit">Crédito madereira</TabsTrigger>}
           <TabsTrigger value="owners">Proprietários</TabsTrigger>
           <TabsTrigger value="users">Usuários</TabsTrigger>
@@ -392,6 +409,35 @@ export function SettingsPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {canEditCategories && (
+          <TabsContent value="financial">
+            <Card>
+              <CardHeader><CardTitle>Financeiro</CardTitle></CardHeader>
+              <CardContent className="space-y-5 max-w-lg">
+                <div className="flex items-center justify-between gap-4 rounded-lg border border-border/60 bg-surface-elevated px-4 py-3">
+                  <div className="min-w-0 flex-1">
+                    <Label htmlFor="secretary-financial-summary" className="text-sm font-medium text-white light:text-gray-900">
+                      Secretária vê resumo financeiro
+                    </Label>
+                    <p className="mt-0.5 text-xs text-gray-500">
+                      {secretaryCanViewSummary
+                        ? 'ON — secretária visualiza Receitas/Despesas pagas e pendentes'
+                        : 'OFF — secretária lança pagamentos sem ver os totais do resumo'}
+                    </p>
+                  </div>
+                  <Switch
+                    id="secretary-financial-summary"
+                    checked={secretaryCanViewSummary}
+                    onCheckedChange={setSecretaryCanViewSummary}
+                    aria-label="Permitir secretária ver resumo financeiro"
+                  />
+                </div>
+                <Button onClick={() => void saveFinancial()}>Salvar configurações</Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
 
         {canEditCategories && (
           <TabsContent value="lumber-credit">

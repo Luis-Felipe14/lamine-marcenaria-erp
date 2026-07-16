@@ -68,3 +68,48 @@ export async function listFinancialTransactions(
     }
   )
 }
+
+export interface FinancialSettings {
+  /** Quando true, a secretária vê o resumo (Receitas/Despesas pagas e pendentes). */
+  secretary_can_view_summary: boolean
+}
+
+export const DEFAULT_FINANCIAL_SETTINGS: FinancialSettings = {
+  secretary_can_view_summary: false,
+}
+
+export async function getFinancialSettings(): Promise<FinancialSettings> {
+  const { data, error } = await supabase
+    .from('settings')
+    .select('value')
+    .eq('key', 'financial')
+    .maybeSingle()
+
+  throwIfError(error, 'configurações financeiras')
+  const value = data?.value as Partial<FinancialSettings> | undefined
+  return {
+    secretary_can_view_summary:
+      value?.secretary_can_view_summary ?? DEFAULT_FINANCIAL_SETTINGS.secretary_can_view_summary,
+  }
+}
+
+export async function saveFinancialSettings(settings: FinancialSettings): Promise<void> {
+  const { data: existing, error: loadError } = await supabase
+    .from('settings')
+    .select('id')
+    .eq('key', 'financial')
+    .maybeSingle()
+
+  throwIfError(loadError, 'configurações financeiras')
+
+  const payload = {
+    key: 'financial',
+    value: settings,
+  }
+
+  const { error } = existing
+    ? await supabase.from('settings').update({ value: payload.value }).eq('key', 'financial')
+    : await supabase.from('settings').insert(payload)
+
+  throwIfError(error, 'salvar configurações financeiras')
+}

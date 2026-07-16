@@ -70,7 +70,13 @@ function categoryRules(type: FinancialFormType, category: string): Partial<Recor
       case 'sinal':
         return {
           client_id: { visible: true, required: true, label: 'Cliente', section: 'link' },
-          order_id: { visible: true, required: false, label: 'Pedido', section: 'link', hint: 'Opcional — vincule ao pedido do projeto' },
+          order_id: {
+            visible: true,
+            required: true,
+            label: 'Pedido',
+            section: 'link',
+            hint: 'Obrigatório — o saldo restante (pedido − sinal) será lançado em A Receber',
+          },
         }
       case 'pedido':
         return {
@@ -114,8 +120,13 @@ function paymentMethodRules(method: string): Partial<Record<FinancialFieldKey, O
   switch (method) {
     case 'cartao':
       return {
-        installment_number: { visible: true, required: true, label: 'Parcela', section: 'payment' },
-        installment_total: { visible: true, required: true, label: 'Total de parcelas', section: 'payment' },
+        installment_total: {
+          visible: true,
+          required: true,
+          label: 'Total de parcelas',
+          section: 'payment',
+          hint: 'Em quantas vezes foi parcelado no cartão (ex.: 12)',
+        },
         document_number: { visible: true, required: false, label: 'Nº documento / NF', section: 'payment', hint: 'Opcional — comprovante ou autorização' },
         notes: { visible: true, required: false, placeholder: 'Bandeira, final do cartão, combinado...', section: 'notes' },
       }
@@ -200,17 +211,20 @@ export function getFinancialFormFields(
   }
 
   if (form.type === 'receita' && form.category === 'pedido' && form.payment_method === 'cartao') {
-    fields.installment_number = { ...fields.installment_number, visible: true, required: true }
     fields.installment_total = { ...fields.installment_total, visible: true, required: true }
   }
 
   if (isEditing) {
     for (const key of Object.keys(fields) as FinancialFieldKey[]) {
+      if (key === 'installment_number') continue
       if (!fields[key].visible && hasFieldValue(form, key)) {
         fields[key] = { ...fields[key], visible: true, required: false }
       }
     }
   }
+
+  // Campo "Parcela" removido da UI — só o total de parcelas é coletado.
+  fields.installment_number = { ...fields.installment_number, visible: false, required: false }
 
   return fields
 }
@@ -288,13 +302,9 @@ export function validateFinancialForm(
     return 'Informe a descrição'
   }
 
-  const instNum = form.installment_number === '' ? null : Number(form.installment_number)
   const instTotal = form.installment_total === '' ? null : Number(form.installment_total)
-  if ((instNum && !instTotal) || (!instNum && instTotal)) {
-    return 'Informe parcela e total de parcelas, ou deixe ambos vazios'
-  }
-  if (instNum && instTotal && instNum > instTotal) {
-    return 'A parcela atual não pode ser maior que o total'
+  if (fields.installment_total.visible && instTotal !== null && instTotal < 1) {
+    return 'Total de parcelas inválido'
   }
 
   return null
@@ -323,9 +333,7 @@ export function sanitizeFinancialPayload(
     supplier_id: fields.supplier_id.visible && form.supplier_id ? form.supplier_id : null,
     employee_id: fields.employee_id.visible && form.employee_id ? form.employee_id : null,
     document_number: fields.document_number.visible ? (form.document_number.trim() || null) : null,
-    installment_number: fields.installment_number.visible && form.installment_number !== ''
-      ? Number(form.installment_number)
-      : null,
+    installment_number: null,
     installment_total: fields.installment_total.visible && form.installment_total !== ''
       ? Number(form.installment_total)
       : null,
