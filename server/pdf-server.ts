@@ -39,6 +39,11 @@ app.get('/health', (_req, res) => {
   res.json({ ok: true })
 })
 
+// Alias usado pelo frontend/proxy Cloudflare ao acordar o servidor
+app.get('/api/pdf/health', (_req, res) => {
+  res.json({ ok: true })
+})
+
 app.get('/api/pdf/budget/:budgetId', async (req, res) => {
   const result = await handleBudgetPdfRequest(req.params.budgetId, req.headers.authorization)
   res.status(result.status)

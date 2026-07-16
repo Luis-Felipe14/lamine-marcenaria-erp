@@ -12,6 +12,10 @@ function buildPdfUrl(budgetId: string): string {
   return PDF_API_BASE ? `${PDF_API_BASE.replace(/\/$/, '')}${path}` : path
 }
 
+function buildHealthUrl(): string {
+  return PDF_API_BASE ? `${PDF_API_BASE.replace(/\/$/, '')}/health` : '/api/pdf/health'
+}
+
 function triggerBrowserDownload(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
@@ -40,15 +44,36 @@ async function assertPdfBlob(blob: Blob): Promise<void> {
   throw new Error('Arquivo recebido não é um PDF válido. Verifique o servidor de geração de PDF.')
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/** Aguarda o Render free acordar via proxy same-origin (evita 502 no Worker). */
+async function ensurePdfServerAwake(): Promise<void> {
+  const healthUrl = buildHealthUrl()
+  const deadline = Date.now() + 55_000
+
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(healthUrl, { cache: 'no-store' })
+      if (response.ok) return
+    } catch {
+      // Render ainda acordando ou rede instável
+    }
+    await sleep(2500)
+  }
+}
+
 async function fetchBudgetPdf(budgetId: string, accessToken: string): Promise<Response> {
   const url = buildPdfUrl(budgetId)
   const headers = { Authorization: `Bearer ${accessToken}` }
 
+  await ensurePdfServerAwake()
+
   try {
     return await fetch(url, { headers })
   } catch (firstError) {
-    // Render free pode estar acordando — uma nova tentativa após breve espera
-    await new Promise((resolve) => setTimeout(resolve, 3000))
+    await sleep(3000)
     try {
       return await fetch(url, { headers })
     } catch {
