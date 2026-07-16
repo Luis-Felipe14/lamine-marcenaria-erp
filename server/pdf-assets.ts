@@ -5,8 +5,8 @@ import { fileURLToPath } from 'node:url'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const publicDir = path.resolve(__dirname, '../public')
 
-/** Limite para caber no plano free do Render (512MB). */
-const MAX_BRAND_ASSET_BYTES = 250_000
+/** Limite de segurança; assets em public/pdf/ já vêm otimizados (~25–40KB). */
+const MAX_BRAND_ASSET_BYTES = 300_000
 
 const MIME_BY_EXT: Record<string, string> = {
   '.png': 'image/png',
@@ -41,7 +41,10 @@ function loadLocalPdfAssetDataUrl(...candidates: string[]): string | undefined {
   return undefined
 }
 
-/** Assets da marca cacheados em memória (evita reler a cada PDF). Preferir SVG leve. */
+/**
+ * Assets da marca para o PDF.
+ * Preferir public/pdf/* (otimizados) para caber no Render free sem perder o visual.
+ */
 export function resolveProposalBrandAssets(): {
   logoUrl?: string
   headerImageUrl?: string
@@ -49,12 +52,15 @@ export function resolveProposalBrandAssets(): {
   if (cachedBrandAssets) return cachedBrandAssets
 
   cachedBrandAssets = {
-    // SVG primeiro — lamine-logo.png tem ~1.7MB e estoura RAM no Render free
-    logoUrl: loadLocalPdfAssetDataUrl('lamine-logo.svg', 'lamine-monogram.svg', 'lamine-logo.png'),
+    logoUrl: loadLocalPdfAssetDataUrl(
+      'pdf/lamine-logo.png',
+      'lamine-logo.svg',
+      'lamine-monogram.svg',
+    ),
     headerImageUrl: loadLocalPdfAssetDataUrl(
-      'login/slide-1.svg',
+      'pdf/lamine-header.jpg',
       'lamine-background.png',
-      'login-background.png',
+      'login/slide-1.svg',
     ),
   }
 

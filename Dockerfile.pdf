@@ -1,4 +1,4 @@
-﻿# Servidor PDF (Puppeteer) - deploy separado do frontend Cloudflare
+# Servidor PDF (Puppeteer) - deploy separado do frontend Cloudflare
 FROM node:20-bookworm-slim
 
 RUN apt-get update && apt-get install -y \
@@ -17,15 +17,17 @@ ENV SKIP_PUPPETEER_INSTALL=true
 ENV NODE_OPTIONS=--max-old-space-size=192
 
 COPY package.json package-lock.json ./
-RUN npm ci --ignore-scripts
+RUN npm ci
 
 COPY server ./server
 COPY src/pdf ./src/pdf
 COPY src/lib ./src/lib
 COPY tsconfig.pdf-server.json ./
 
-# Só assets leves para o PDF (evita lamine-logo.png ~1.7MB no container)
-COPY public/lamine-logo.svg public/lamine-monogram.svg public/lamine-background.png ./public/
+# Assets otimizados para PDF (logo ~25KB + header ~36KB) — visual preservado
+COPY public/pdf ./public/pdf
+COPY public/lamine-logo.svg public/lamine-monogram.svg ./public/
+COPY public/lamine-background.png ./public/
 COPY public/login/slide-1.svg ./public/login/
 
 EXPOSE 10000
