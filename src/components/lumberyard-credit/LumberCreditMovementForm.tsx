@@ -333,7 +333,7 @@ export function LumberCreditMovementForm({
               )}
 
               {(fields.installment_number.visible || fields.installment_total.visible) && (
-                <div className="grid grid-cols-2 gap-4">
+                <div className={fields.installment_number.visible && fields.installment_total.visible ? 'grid grid-cols-2 gap-4' : undefined}>
                   {fields.installment_number.visible && (
                     <div>
                       <Label>
@@ -362,7 +362,7 @@ export function LumberCreditMovementForm({
                       <Input
                         type="number"
                         min={1}
-                        placeholder="Ex.: 10"
+                        placeholder="Opcional — ex.: 10"
                         value={form.installment_total}
                         onChange={(e) => setForm({
                           ...form,

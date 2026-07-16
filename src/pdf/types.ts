@@ -1,4 +1,5 @@
 export type BudgetProposalTemplateId = 'premium' | 'classic' | 'executive'
+export type BudgetProposalDetailMode = 'items' | 'totals'
 
 export interface BudgetProposalCompany {
   name: string
@@ -34,6 +35,8 @@ export interface BudgetProposalEnvironment {
 
 export interface BudgetProposalData {
   templateId: BudgetProposalTemplateId
+  /** items = valores por móvel; totals = só totais por ambiente */
+  detailMode: BudgetProposalDetailMode
   company: BudgetProposalCompany
   budget: {
     number: number

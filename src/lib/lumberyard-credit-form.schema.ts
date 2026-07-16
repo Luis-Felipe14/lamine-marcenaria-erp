@@ -138,19 +138,12 @@ function entradaPaymentRules(method: string): Partial<Record<LumberCreditFieldKe
   switch (method) {
     case 'cartao':
       return {
-        installment_number: {
-          visible: true,
-          required: true,
-          label: 'Parcela atual',
-          section: 'payment',
-          hint: 'Qual parcela você está registrando agora (ex.: 2ª de 10 → informe 2)',
-        },
         installment_total: {
           visible: true,
-          required: true,
+          required: false,
           label: 'Total de parcelas',
           section: 'payment',
-          hint: 'Em quantas vezes o cliente parcelou no cartão (ex.: 10x → informe 10)',
+          hint: 'Opcional — em quantas vezes o cliente parcelou no cartão (ex.: 10x → informe 10)',
         },
         invoice_number: {
           visible: true,
@@ -467,11 +460,16 @@ export function validateLumberCreditForm(
 
   const instNum = form.installment_number === '' ? null : Number(form.installment_number)
   const instTotal = form.installment_total === '' ? null : Number(form.installment_total)
-  if ((instNum && !instTotal) || (!instNum && instTotal)) {
-    return 'Informe parcela e total de parcelas, ou deixe ambos vazios'
+  if (fields.installment_total.visible && instTotal !== null && instTotal < 1) {
+    return 'Total de parcelas inválido'
   }
-  if (instNum && instTotal && instNum > instTotal) {
-    return 'A parcela atual não pode ser maior que o total'
+  if (fields.installment_number.visible && fields.installment_total.visible) {
+    if ((instNum && !instTotal) || (!instNum && instTotal)) {
+      return 'Informe parcela e total de parcelas, ou deixe ambos vazios'
+    }
+    if (instNum && instTotal && instNum > instTotal) {
+      return 'A parcela atual não pode ser maior que o total'
+    }
   }
 
   return null

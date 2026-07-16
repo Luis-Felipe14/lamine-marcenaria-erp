@@ -12,7 +12,7 @@ import {
   computeValidityDate,
   formatClientAddress,
 } from '@/pdf/defaults'
-import type { BudgetProposalData, BudgetProposalTemplateId } from '@/pdf/types'
+import type { BudgetProposalData, BudgetProposalDetailMode, BudgetProposalTemplateId } from '@/pdf/types'
 
 function resolveAbsoluteUrl(path: string, baseUrl: string): string {
   if (/^https?:\/\//i.test(path)) return path
@@ -36,6 +36,10 @@ async function fetchCompanyInfo(supabase: SupabaseClient): Promise<CompanyInfo> 
 function parseTemplateId(value: string | null | undefined): BudgetProposalTemplateId {
   if (value === 'classic' || value === 'executive' || value === 'premium') return value
   return 'premium'
+}
+
+function parseDetailMode(value: string | null | undefined): BudgetProposalDetailMode {
+  return value === 'totals' ? 'totals' : 'items'
 }
 
 export async function loadBudgetProposalData(
@@ -135,10 +139,12 @@ export async function loadBudgetProposalData(
     manufacturing_timeline?: string | null
     installation_timeline?: string | null
     proposal_template?: string | null
+    proposal_detail_mode?: string | null
   }
 
   return {
     templateId: parseTemplateId(budgetRow.proposal_template),
+    detailMode: parseDetailMode(budgetRow.proposal_detail_mode),
     company: {
       name: company.name || `${APP_NAME} ${APP_SUBTITLE}`,
       document: company.document,

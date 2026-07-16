@@ -485,7 +485,7 @@ export function formatLumberCreditMovementDetail(row: LumberCreditMovement): str
     const parts: string[] = []
     if (row.client?.name) parts.push(row.client.name)
     if (row.order?.number) parts.push(`Pedido #${row.order.number}`)
-    if (row.installment_number && row.installment_total) {
+    if (row.installment_total || row.installment_number) {
       parts.push(`Cartão ${formatInstallment(row.installment_number, row.installment_total)}`)
     }
     return parts.join(' · ') || 'Entrada de crédito'

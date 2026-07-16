@@ -3,6 +3,8 @@ import { formatCurrency } from '@/lib/utils'
 
 interface EnvironmentBlockProps {
   environment: BudgetProposalEnvironment
+  /** Quando false, omite valores individuais dos móveis (só totais por ambiente). */
+  showItemPrices?: boolean
 }
 
 function EnvironmentPlaceholder() {
@@ -16,7 +18,7 @@ function EnvironmentPlaceholder() {
   )
 }
 
-export function EnvironmentBlock({ environment }: EnvironmentBlockProps) {
+export function EnvironmentBlock({ environment, showItemPrices = true }: EnvironmentBlockProps) {
   const items = environment.items
     .map((item) => ({
       description: item.description.trim(),
@@ -60,7 +62,9 @@ export function EnvironmentBlock({ environment }: EnvironmentBlockProps) {
                     <span className="proposal-env__item-specs"> — {item.specifications}</span>
                   ) : null}
                 </span>
-                <strong className="proposal-checklist__value">{formatCurrency(item.value)}</strong>
+                {showItemPrices ? (
+                  <strong className="proposal-checklist__value">{formatCurrency(item.value)}</strong>
+                ) : null}
               </li>
             ))}
           </ul>

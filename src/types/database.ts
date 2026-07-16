@@ -122,6 +122,7 @@ export interface Database {
           manufacturing_timeline: string | null
           installation_timeline: string | null
           proposal_template: string
+          proposal_detail_mode: string
           responsible_id: string | null
           created_at: string
           updated_at: string

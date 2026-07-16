@@ -40,6 +40,7 @@ export function formatRelativeDate(date: string | Date): string {
 }
 
 export function formatInstallment(current: number | null | undefined, total: number | null | undefined): string {
+  if (total && total >= 1 && (!current || current < 1)) return `${total}x`
   if (!current || !total || total < 1) return '—'
   return `${current}/${total}`
 }

@@ -31,6 +31,7 @@ import {
   DEFAULT_INSTALLATION_TIMELINE,
   DEFAULT_MANUFACTURING_TIMELINE,
 } from '@/pdf/defaults'
+import type { BudgetProposalDetailMode } from '@/pdf/types'
 import { useConfirm } from '@/hooks/useConfirm'
 import { useBudgets, useLookupClients } from '@/hooks/useQueries'
 import type { Budget } from '@/services/budgets.service'
@@ -50,6 +51,8 @@ interface BudgetEnvironmentForm {
   imageFile: File | null
   imagePreview: string | null
   items: BudgetItemForm[]
+  /** Valor de venda do ambiente (editável; recalcula ao alterar móveis). */
+  subtotal: number
 }
 
 const emptyItem = (): BudgetItemForm => ({
@@ -59,6 +62,10 @@ const emptyItem = (): BudgetItemForm => ({
   unit_price: 0,
 })
 
+function itemsSellingSum(items: BudgetItemForm[]) {
+  return items.reduce((sum, item) => sum + item.quantity * item.unit_price, 0)
+}
+
 const emptyEnvironment = (name = 'Sala'): BudgetEnvironmentForm => ({
   name,
   description: '',
@@ -66,6 +73,7 @@ const emptyEnvironment = (name = 'Sala'): BudgetEnvironmentForm => ({
   imageFile: null,
   imagePreview: null,
   items: [emptyItem()],
+  subtotal: 0,
 })
 
 const emptyForm = () => ({
@@ -78,25 +86,33 @@ const emptyForm = () => ({
   entrada_percent: DEFAULT_ENTRADA_PERCENT,
   manufacturing_timeline: DEFAULT_MANUFACTURING_TIMELINE,
   installation_timeline: DEFAULT_INSTALLATION_TIMELINE,
+  proposal_detail_mode: 'items' as BudgetProposalDetailMode,
   environments: [emptyEnvironment()],
 })
 
 const BUDGET_LOCKED_STATUSES = ['convertido_pedido', 'aprovado'] as const
 
 function environmentSellingTotal(env: BudgetEnvironmentForm) {
-  return env.items.reduce((sum, item) => sum + item.quantity * item.unit_price, 0)
+  return Number(env.subtotal) || 0
+}
+
+function withRecalculatedSubtotal(env: BudgetEnvironmentForm, items: BudgetItemForm[]): BudgetEnvironmentForm {
+  return { ...env, items, subtotal: itemsSellingSum(items) }
 }
 
 function projectSellingTotal(environments: BudgetEnvironmentForm[]) {
   return environments.reduce((sum, env) => sum + environmentSellingTotal(env), 0)
 }
 
-function flattenValidItems(environments: BudgetEnvironmentForm[]) {
-  return environments.flatMap((env) =>
-    env.items
-      .filter((item) => item.description.trim())
-      .map((item) => ({ env, item })),
-  )
+/** Ambiente válido: nome + (descrição comercial OU pelo menos um móvel). */
+function environmentHasContent(env: BudgetEnvironmentForm) {
+  if (!env.name.trim()) return false
+  if (env.description.trim()) return true
+  return env.items.some((item) => item.description.trim())
+}
+
+function parseDetailMode(value: string | null | undefined): BudgetProposalDetailMode {
+  return value === 'totals' ? 'totals' : 'items'
 }
 
 export function BudgetsPage() {
@@ -170,6 +186,7 @@ export function BudgetsPage() {
         entrada_percent: number | null
         manufacturing_timeline: string | null
         installation_timeline: string | null
+        proposal_detail_mode: string | null
       }
 
       const envRows = environments ?? []
@@ -181,6 +198,13 @@ export function BudgetsPage() {
         environmentForms = envRows.map((env) => {
           const envItems = itemRows.filter((item) => item.environment_id === env.id)
           const imageUrl = (env as { image_url?: string | null }).image_url?.trim() || null
+          const items = envItems.map((item) => ({
+            description: item.description,
+            specifications: item.material ?? '',
+            quantity: Number(item.quantity),
+            unit_price: Number(item.unit_price),
+          }))
+          const storedSubtotal = Number((env as { subtotal?: number }).subtotal)
           return {
             id: env.id,
             name: env.name,
@@ -188,12 +212,10 @@ export function BudgetsPage() {
             image_url: imageUrl,
             imageFile: null,
             imagePreview: imageUrl,
-            items: envItems.map((item) => ({
-              description: item.description,
-              specifications: item.material ?? '',
-              quantity: Number(item.quantity),
-              unit_price: Number(item.unit_price),
-            })),
+            items,
+            subtotal: Number.isFinite(storedSubtotal) && storedSubtotal > 0
+              ? storedSubtotal
+              : itemsSellingSum(items),
           }
         })
       } else {
@@ -209,7 +231,12 @@ export function BudgetsPage() {
             quantity: Number(item.quantity),
             unit_price: Number(item.unit_price),
           })),
+          subtotal: 0,
         }]
+        environmentForms = environmentForms.map((env) => ({
+          ...env,
+          subtotal: itemsSellingSum(env.items),
+        }))
       }
 
       environmentForms = environmentForms.map((env) => ({
@@ -227,6 +254,7 @@ export function BudgetsPage() {
         entrada_percent: Number(row.entrada_percent ?? DEFAULT_ENTRADA_PERCENT),
         manufacturing_timeline: row.manufacturing_timeline?.trim() || DEFAULT_MANUFACTURING_TIMELINE,
         installation_timeline: row.installation_timeline?.trim() || DEFAULT_INSTALLATION_TIMELINE,
+        proposal_detail_mode: parseDetailMode(row.proposal_detail_mode),
         environments: environmentForms.length > 0 ? environmentForms : [emptyEnvironment()],
       })
     } catch (e) {
@@ -333,8 +361,8 @@ export function BudgetsPage() {
       toast.error('Adicione pelo menos um ambiente com nome')
       return
     }
-    if (flattenValidItems(form.environments).length === 0) {
-      toast.error('Adicione pelo menos um item com descrição')
+    if (!form.environments.some(environmentHasContent)) {
+      toast.error('Informe a descrição do ambiente ou pelo menos um móvel')
       return
     }
     setSubmitting(true)
@@ -356,6 +384,7 @@ export function BudgetsPage() {
         manufacturing_timeline: form.manufacturing_timeline.trim() || null,
         installation_timeline: form.installation_timeline.trim() || null,
         proposal_template: 'premium',
+        proposal_detail_mode: form.proposal_detail_mode,
       }
 
       if (editing) {
@@ -389,10 +418,8 @@ export function BudgetsPage() {
   const removeItem = (envIndex: number, itemIndex: number) => {
     const environments = [...form.environments]
     if (environments[envIndex].items.length <= 1) return
-    environments[envIndex] = {
-      ...environments[envIndex],
-      items: environments[envIndex].items.filter((_, i) => i !== itemIndex),
-    }
+    const items = environments[envIndex].items.filter((_, i) => i !== itemIndex)
+    environments[envIndex] = withRecalculatedSubtotal(environments[envIndex], items)
     setForm({ ...form, environments })
   }
 
@@ -580,19 +607,23 @@ export function BudgetsPage() {
                         <div>
                           <Label>Descrição comercial do ambiente</Label>
                           <Textarea
-                            placeholder="Texto opcional exibido no PDF (ex.: composição e estilo do ambiente)"
+                            placeholder={'Liste os móveis e detalhes do ambiente (ex.:\n• Torre panos — MDF branco\n• Bancada — quartzito\n• Armário aéreo — 2 portas)'}
                             value={env.description}
                             onChange={(e) => {
                               const environments = [...form.environments]
                               environments[envIndex] = { ...environments[envIndex], description: e.target.value }
                               setForm({ ...form, environments })
                             }}
-                            rows={4}
+                            rows={5}
                           />
+                          <p className="mt-1 text-xs text-gray-500">
+                            Pode descrever/destacar os móveis aqui. Os itens abaixo são opcionais se a descrição estiver preenchida.
+                          </p>
                         </div>
                       </div>
 
                       <div className="space-y-2">
+                        <Label className="text-sm text-gray-400">Móveis (opcional — use se quiser valor por item no PDF)</Label>
                         {env.items.map((item, itemIndex) => (
                           <div key={itemIndex} className="flex gap-2">
                             <div className="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-[1.2fr_1.4fr_0.6fr_0.9fr]">
@@ -628,7 +659,7 @@ export function BudgetsPage() {
                                   const environments = [...form.environments]
                                   const items = [...environments[envIndex].items]
                                   items[itemIndex] = { ...items[itemIndex], quantity: Number(e.target.value) }
-                                  environments[envIndex] = { ...environments[envIndex], items }
+                                  environments[envIndex] = withRecalculatedSubtotal(environments[envIndex], items)
                                   setForm({ ...form, environments })
                                 }}
                               />
@@ -639,7 +670,7 @@ export function BudgetsPage() {
                                   const environments = [...form.environments]
                                   const items = [...environments[envIndex].items]
                                   items[itemIndex] = { ...items[itemIndex], unit_price }
-                                  environments[envIndex] = { ...environments[envIndex], items }
+                                  environments[envIndex] = withRecalculatedSubtotal(environments[envIndex], items)
                                   setForm({ ...form, environments })
                                 }}
                               />
@@ -668,9 +699,19 @@ export function BudgetsPage() {
                         </Button>
                       </div>
 
-                      <div className="mt-3 rounded-lg border border-gold/20 bg-gold/5 px-3 py-2 text-sm">
-                        <span className="text-gray-400">Valor do ambiente: </span>
-                        <span className="font-semibold text-gold">{formatCurrency(environmentSellingTotal(env))}</span>
+                      <div className="mt-3 rounded-lg border border-gold/20 bg-gold/5 px-3 py-2">
+                        <Label className="text-gray-400">Valor do ambiente</Label>
+                        <CurrencyInput
+                          value={env.subtotal}
+                          onChange={(subtotal) => {
+                            const environments = [...form.environments]
+                            environments[envIndex] = { ...environments[envIndex], subtotal }
+                            setForm({ ...form, environments })
+                          }}
+                        />
+                        <p className="mt-1 text-xs text-gray-500">
+                          Soma automática dos móveis; você também pode ajustar manualmente.
+                        </p>
                       </div>
                     </div>
                   ))}
@@ -682,6 +723,39 @@ export function BudgetsPage() {
 
                 <div className="space-y-3 rounded-xl border border-border/60 bg-surface-elevated/30 p-4">
                   <Label className="text-base">Proposta comercial (PDF)</Label>
+
+                  <div>
+                    <Label>Detalhe dos valores no PDF</Label>
+                    <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <Button
+                        type="button"
+                        variant={form.proposal_detail_mode === 'items' ? 'default' : 'outline'}
+                        className="h-auto justify-start whitespace-normal px-3 py-2 text-left"
+                        onClick={() => setForm({ ...form, proposal_detail_mode: 'items' })}
+                      >
+                        <span className="block">
+                          <span className="font-medium">Valor por item</span>
+                          <span className="mt-0.5 block text-xs opacity-80">
+                            Lista cada móvel com o preço individual
+                          </span>
+                        </span>
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={form.proposal_detail_mode === 'totals' ? 'default' : 'outline'}
+                        className="h-auto justify-start whitespace-normal px-3 py-2 text-left"
+                        onClick={() => setForm({ ...form, proposal_detail_mode: 'totals' })}
+                      >
+                        <span className="block">
+                          <span className="font-medium">Só totais</span>
+                          <span className="mt-0.5 block text-xs opacity-80">
+                            Mostra valor por ambiente e total geral
+                          </span>
+                        </span>
+                      </Button>
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
                       <Label>Percentual de entrada (%)</Label>

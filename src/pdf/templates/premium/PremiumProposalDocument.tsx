@@ -11,6 +11,8 @@ interface PremiumProposalDocumentProps {
 }
 
 export function PremiumProposalDocument({ data }: PremiumProposalDocumentProps) {
+  const showItemPrices = data.detailMode !== 'totals'
+
   return (
     <div className="proposal-root">
       <div className="proposal-document">
@@ -20,7 +22,11 @@ export function PremiumProposalDocument({ data }: PremiumProposalDocumentProps) 
         <div className="proposal-body">
           <div className="proposal-main">
             {data.environments.map((environment, index) => (
-              <EnvironmentBlock key={`${environment.name}-${index}`} environment={environment} />
+              <EnvironmentBlock
+                key={`${environment.name}-${index}`}
+                environment={environment}
+                showItemPrices={showItemPrices}
+              />
             ))}
             <ProposalBottomSection data={data} />
           </div>
