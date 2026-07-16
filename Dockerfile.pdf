@@ -1,10 +1,9 @@
-# Servidor PDF (Puppeteer) - deploy separado do frontend Cloudflare
+﻿# Servidor PDF (Puppeteer) - deploy separado do frontend Cloudflare
 FROM node:20-bookworm-slim
 
 RUN apt-get update && apt-get install -y \
     chromium \
     fonts-liberation \
-    fonts-noto-color-emoji \
     ca-certificates \
     --no-install-recommends \
   && rm -rf /var/lib/apt/lists/*
@@ -15,6 +14,7 @@ ENV NODE_ENV=production
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV SKIP_PUPPETEER_INSTALL=true
+ENV NODE_OPTIONS=--max-old-space-size=192
 
 COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts
@@ -22,8 +22,11 @@ RUN npm ci --ignore-scripts
 COPY server ./server
 COPY src/pdf ./src/pdf
 COPY src/lib ./src/lib
-COPY public ./public
 COPY tsconfig.pdf-server.json ./
+
+# Só assets leves para o PDF (evita lamine-logo.png ~1.7MB no container)
+COPY public/lamine-logo.svg public/lamine-monogram.svg public/lamine-background.png ./public/
+COPY public/login/slide-1.svg ./public/login/
 
 EXPOSE 10000
 

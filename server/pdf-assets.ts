@@ -1,9 +1,12 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const publicDir = path.resolve(__dirname, '../public')
+
+/** Limite para caber no plano free do Render (512MB). */
+const MAX_BRAND_ASSET_BYTES = 250_000
 
 const MIME_BY_EXT: Record<string, string> = {
   '.png': 'image/png',
@@ -18,6 +21,11 @@ let cachedBrandAssets: { logoUrl?: string; headerImageUrl?: string } | null = nu
 
 function fileToDataUrl(filePath: string): string | undefined {
   if (!existsSync(filePath)) return undefined
+  const size = statSync(filePath).size
+  if (size > MAX_BRAND_ASSET_BYTES) {
+    console.warn(`[pdf] Asset ignorado (muito grande: ${size} bytes): ${filePath}`)
+    return undefined
+  }
   const ext = path.extname(filePath).toLowerCase()
   const mime = MIME_BY_EXT[ext] ?? 'application/octet-stream'
   const buffer = readFileSync(filePath)
@@ -33,7 +41,7 @@ function loadLocalPdfAssetDataUrl(...candidates: string[]): string | undefined {
   return undefined
 }
 
-/** Assets da marca cacheados em memória (evita reler PNG grandes a cada PDF). */
+/** Assets da marca cacheados em memória (evita reler a cada PDF). Preferir SVG leve. */
 export function resolveProposalBrandAssets(): {
   logoUrl?: string
   headerImageUrl?: string
@@ -41,11 +49,12 @@ export function resolveProposalBrandAssets(): {
   if (cachedBrandAssets) return cachedBrandAssets
 
   cachedBrandAssets = {
-    logoUrl: loadLocalPdfAssetDataUrl('lamine-logo.png', 'lamine-logo.svg'),
+    // SVG primeiro — lamine-logo.png tem ~1.7MB e estoura RAM no Render free
+    logoUrl: loadLocalPdfAssetDataUrl('lamine-logo.svg', 'lamine-monogram.svg', 'lamine-logo.png'),
     headerImageUrl: loadLocalPdfAssetDataUrl(
+      'login/slide-1.svg',
       'lamine-background.png',
       'login-background.png',
-      'login/slide-1.svg',
     ),
   }
 

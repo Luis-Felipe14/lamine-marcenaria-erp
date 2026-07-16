@@ -18,6 +18,7 @@ const proposalCss = readFileSync(
 
 let browserInstance: Browser | null = null
 let browserLaunchPromise: Promise<Browser> | null = null
+let pdfQueue: Promise<unknown> = Promise.resolve()
 
 function formatPdfServerError(error: unknown): string {
   if (error instanceof Error && error.message) return error.message
@@ -82,6 +83,36 @@ function resolveChromeExecutable(): string {
   )
 }
 
+const LOW_MEMORY_CHROME_ARGS = [
+  '--no-sandbox',
+  '--disable-setuid-sandbox',
+  '--disable-dev-shm-usage',
+  '--disable-gpu',
+  '--disable-software-rasterizer',
+  '--font-render-hinting=none',
+  '--no-first-run',
+  '--no-default-browser-check',
+  '--disable-extensions',
+  '--disable-background-networking',
+  '--disable-background-timer-throttling',
+  '--disable-backgrounding-occluded-windows',
+  '--disable-breakpad',
+  '--disable-component-update',
+  '--disable-default-apps',
+  '--disable-domain-reliability',
+  '--disable-hang-monitor',
+  '--disable-ipc-flooding-protection',
+  '--disable-popup-blocking',
+  '--disable-prompt-on-repost',
+  '--disable-renderer-backgrounding',
+  '--disable-sync',
+  '--metrics-recording-only',
+  '--mute-audio',
+  '--no-zygote',
+  '--single-process',
+  '--js-flags=--max-old-space-size=128',
+]
+
 async function getBrowser(): Promise<Browser> {
   if (browserInstance?.connected) return browserInstance
 
@@ -90,15 +121,9 @@ async function getBrowser(): Promise<Browser> {
     browserLaunchPromise = puppeteer.launch({
       headless: true,
       executablePath,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--font-render-hinting=none',
-        '--no-first-run',
-        '--no-default-browser-check',
-      ],
+      args: LOW_MEMORY_CHROME_ARGS,
+      // Reduz footprint no plano free (512MB)
+      dumpio: false,
     }).then((browser) => {
       browserInstance = browser
       browser.on('disconnected', () => {
@@ -115,14 +140,13 @@ async function getBrowser(): Promise<Browser> {
   return browserLaunchPromise
 }
 
-/** Pré-aquece Chromium e assets na subida do servidor. */
+/** No plano free, não mantém Chromium residente — só valida assets. */
 export async function warmPdfBrowser(): Promise<void> {
   try {
     resolveProposalBrandAssets()
-    await getBrowser()
-    console.log('[pdf] Chromium aquecido e pronto')
+    console.log('[pdf] Assets de marca carregados (Chromium sob demanda)')
   } catch (error) {
-    console.warn('[pdf] Não foi possível pré-aquecer o Chromium:', formatPdfServerError(error))
+    console.warn('[pdf] Não foi possível carregar assets:', formatPdfServerError(error))
   }
 }
 
@@ -133,7 +157,7 @@ export async function closePdfBrowser(): Promise<void> {
   if (browser?.connected) await browser.close()
 }
 
-export async function generateBudgetPdfBuffer(
+async function generateBudgetPdfBufferOnce(
   budgetId: string,
   accessToken: string,
 ): Promise<{ buffer: Buffer; filename: string }> {
@@ -153,15 +177,18 @@ export async function generateBudgetPdfBuffer(
   const page = await browser.newPage()
 
   try {
-    // Assets já vão embutidos como data URL; bloqueia fonts externas para não esperar rede
+    await page.setViewport({ width: 794, height: 1123, deviceScaleFactor: 1 })
     await page.setRequestInterception(true)
     page.on('request', (request) => {
       const resourceType = request.resourceType()
       const url = request.url()
       if (
         resourceType === 'font'
+        || resourceType === 'media'
+        || resourceType === 'websocket'
         || url.includes('fonts.googleapis.com')
         || url.includes('fonts.gstatic.com')
+        || (resourceType === 'image' && !url.startsWith('data:'))
       ) {
         void request.abort()
         return
@@ -184,7 +211,19 @@ export async function generateBudgetPdfBuffer(
     return { buffer: Buffer.from(pdf), filename }
   } finally {
     await page.close().catch(() => undefined)
+    // Libera RAM entre requisições no Render free
+    await closePdfBrowser().catch(() => undefined)
   }
+}
+
+/** Serializa gerações — evita 2 Chromiums ao mesmo tempo no free tier. */
+export async function generateBudgetPdfBuffer(
+  budgetId: string,
+  accessToken: string,
+): Promise<{ buffer: Buffer; filename: string }> {
+  const run = pdfQueue.then(() => generateBudgetPdfBufferOnce(budgetId, accessToken))
+  pdfQueue = run.then(() => undefined, () => undefined)
+  return run
 }
 
 export async function handleBudgetPdfRequest(
@@ -216,10 +255,15 @@ export async function handleBudgetPdfRequest(
   } catch (error) {
     const message = formatPdfServerError(error)
     console.error('[pdf]', message, error)
+    const isOom = /out of memory|ENOMEM|Cannot allocate/i.test(message)
     return {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: message }),
+      body: JSON.stringify({
+        error: isOom
+          ? 'Servidor de PDF sem memória. Tente novamente em alguns segundos ou reduza imagens do orçamento.'
+          : message,
+      }),
     }
   }
 }
