@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Users, Target, FileText, Package, Factory,
   Warehouse, ShoppingCart, DollarSign, Megaphone, UserCog,
-  MessageSquare, BarChart3, Settings, Menu, LogOut, CreditCard, ClipboardList, X, PenTool,
+  MessageSquare, BarChart3, Settings, Menu, LogOut, CreditCard, ClipboardList, X, PenTool, Truck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SidebarBrandHeader } from './SidebarBrandHeader'
@@ -51,6 +51,7 @@ const mainNavGroups: NavGroup[] = [
       { to: '/producao', icon: Factory, label: 'Produção', permission: 'production.read' },
       { to: '/estoque', icon: Warehouse, label: 'Estoque', permission: 'inventory.read', alert: true },
       { to: '/compras', icon: ShoppingCart, label: 'Compras', permission: 'purchases.read' },
+      { to: '/fornecedores', icon: Truck, label: 'Fornecedores', permission: 'purchases.read' },
       { to: '/credito-madereira', icon: CreditCard, label: 'Créd. Madereira', permission: 'lumber_credit.read' },
     ],
   },

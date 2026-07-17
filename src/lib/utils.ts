@@ -45,6 +45,43 @@ export function formatInstallment(current: number | null | undefined, total: num
   return `${current}/${total}`
 }
 
+export type DueUrgency = 'overdue' | 'soon' | 'today' | null
+
+/** Avalia urgência de vencimento para lançamentos pendentes (data local yyyy-mm-dd). */
+export function getDueUrgency(
+  dueDate: string | null | undefined,
+  isPaid: boolean,
+  soonDays = 7,
+): DueUrgency {
+  if (isPaid || !dueDate || !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) return null
+  const [y, m, d] = dueDate.split('-').map(Number)
+  const due = new Date(y, m - 1, d)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  due.setHours(0, 0, 0, 0)
+  const diffDays = Math.round((due.getTime() - today.getTime()) / 86_400_000)
+  if (diffDays < 0) return 'overdue'
+  if (diffDays === 0) return 'today'
+  if (diffDays <= soonDays) return 'soon'
+  return null
+}
+
+export function getDueUrgencyLabel(urgency: DueUrgency, dueDate?: string | null): string {
+  if (urgency === 'overdue') return 'Vencida'
+  if (urgency === 'today') return 'Vence hoje'
+  if (urgency === 'soon' && dueDate && /^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
+    const [y, m, d] = dueDate.split('-').map(Number)
+    const due = new Date(y, m - 1, d)
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    due.setHours(0, 0, 0, 0)
+    const days = Math.round((due.getTime() - today.getTime()) / 86_400_000)
+    return days === 1 ? 'Vence amanhã' : `Vence em ${days} dias`
+  }
+  if (urgency === 'soon') return 'Próximo'
+  return ''
+}
+
 /** Ex.: "15 de junho" — para datas ISO yyyy-mm-dd */
 export function formatBirthdayDay(date: string | null | undefined): string {
   if (!date) return '—'

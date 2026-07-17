@@ -24,7 +24,7 @@ import {
   validateFinancialForm,
   type FinancialFormState,
 } from '@/lib/financial-form.schema'
-import { formatCurrency, formatDate, formatInstallment } from '@/lib/utils'
+import { formatCurrency, formatDate, formatInstallment, getDueUrgency, getDueUrgencyLabel } from '@/lib/utils'
 import { invalidateDashboardMetrics } from '@/lib/invalidate-dashboard'
 import { createRecord, updateRecord, softDelete } from '@/services/api'
 import type { FinancialTransaction } from '@/services/financial.service'
@@ -307,13 +307,50 @@ export function FinancialPage() {
               : '—',
           },
           { key: 'amount', header: 'Valor', render: (r) => formatCurrency(r.amount) },
-          { key: 'due_date', header: 'Vencimento', render: (r) => formatDate(r.due_date) },
+          {
+            key: 'due_date',
+            header: 'Vencimento',
+            render: (r) => {
+              const urgency = getDueUrgency(r.due_date, r.is_paid)
+              const label = getDueUrgencyLabel(urgency, r.due_date)
+              return (
+                <div className="flex flex-col gap-1">
+                  <span className={
+                    urgency === 'overdue' || urgency === 'today'
+                      ? 'text-red-400'
+                      : urgency === 'soon'
+                        ? 'text-yellow-400'
+                        : undefined
+                  }>
+                    {formatDate(r.due_date)}
+                  </span>
+                  {label && (
+                    <Badge
+                      variant={urgency === 'overdue' || urgency === 'today' ? 'danger' : 'warning'}
+                      className="w-fit"
+                    >
+                      {label}
+                    </Badge>
+                  )}
+                </div>
+              )
+            },
+          },
           {
             key: 'is_paid',
             header: 'Status',
-            render: (r) => r.is_paid ? <Badge variant="success">Pago</Badge> : (
-              <Button size="sm" variant="outline" onClick={() => markPaid(r.id)}>Confirmar</Button>
-            ),
+            render: (r) => {
+              if (r.is_paid) return <Badge variant="success">Pago</Badge>
+              const urgency = getDueUrgency(r.due_date, false)
+              return (
+                <div className="flex flex-col items-start gap-1">
+                  <Button size="sm" variant="outline" onClick={() => markPaid(r.id)}>Confirmar</Button>
+                  {urgency === 'overdue' && (
+                    <span className="text-[10px] font-medium uppercase tracking-wide text-red-400">Em atraso</span>
+                  )}
+                </div>
+              )
+            },
           },
           {
             key: 'actions',
