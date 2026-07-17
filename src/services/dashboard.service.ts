@@ -14,7 +14,8 @@ async function sumFinancialAmountFallback(
   isPaid: boolean,
   dateFrom?: string,
   dateTo?: string,
-  dueDateTo?: string
+  dueDateTo?: string,
+  cashDestination?: string | null,
 ): Promise<number> {
   let q = supabase
     .from('financial_transactions')
@@ -25,6 +26,7 @@ async function sumFinancialAmountFallback(
   if (dateFrom) q = q.gte('paid_date', dateFrom)
   if (dateTo) q = q.lte('paid_date', dateTo)
   if (dueDateTo) q = q.lte('due_date', dueDateTo)
+  if (cashDestination) q = q.eq('cash_destination', cashDestination)
   const { data, error } = await q
   if (error) {
     console.warn('[Dashboard] sumFinancialAmount fallback:', error.message)
@@ -38,7 +40,8 @@ async function sumFinancialAmount(
   isPaid: boolean,
   dateFrom?: string,
   dateTo?: string,
-  dueDateTo?: string
+  dueDateTo?: string,
+  cashDestination?: string | null,
 ): Promise<number> {
   const { data, error } = await supabase.rpc('sum_financial_amount', {
     p_type: type,
@@ -46,11 +49,12 @@ async function sumFinancialAmount(
     p_date_from: dateFrom ?? null,
     p_date_to: dateTo ?? null,
     p_due_date_to: dueDateTo ?? null,
+    p_cash_destination: cashDestination ?? null,
   })
 
   if (error) {
     if (error.code === 'PGRST202') {
-      return sumFinancialAmountFallback(type, isPaid, dateFrom, dateTo, dueDateTo)
+      return sumFinancialAmountFallback(type, isPaid, dateFrom, dateTo, dueDateTo, cashDestination)
     }
     console.warn('[Dashboard] sumFinancialAmount:', error.message)
     return 0
@@ -101,12 +105,12 @@ export async function getExecutiveMetrics() {
     countQuery('orders', (q) => q.in('status', ['em_producao', 'aguardando_material']).is('deleted_at', null)),
     supabase.from('orders').select('id', { count: 'exact', head: true }).is('deleted_at', null).lt('deadline', today).in('status', ACTIVE_ORDER_STATUSES),
     countCriticalStock(),
-    sumFinancialAmount('receita', true, monthStart, monthEnd),
+    sumFinancialAmount('receita', true, monthStart, monthEnd, undefined, 'empresa'),
     sumFinancialAmount('despesa', true, monthStart, monthEnd),
   ])
 
   const [dailyRevenues, goalsSetting] = await Promise.all([
-    sumFinancialAmount('receita', true, today, today),
+    sumFinancialAmount('receita', true, today, today, undefined, 'empresa'),
     supabase.from('settings').select('value').eq('key', 'goals').maybeSingle(),
   ])
 
@@ -182,7 +186,7 @@ export async function getFinancialChart(months = 6) {
 
   const { data, error } = await supabase
     .from('financial_transactions')
-    .select('type, amount, paid_date')
+    .select('type, amount, paid_date, cash_destination')
     .eq('is_paid', true)
     .gte('paid_date', startDate)
     .lte('paid_date', endDate)
@@ -199,6 +203,7 @@ export async function getFinancialChart(months = 6) {
 
   for (const row of data ?? []) {
     if (!row.paid_date) continue
+    if (row.type === 'receita' && row.cash_destination === 'madeireira') continue
     const key = row.paid_date.slice(0, 7)
     const bucket = buckets.get(key)
     if (!bucket) continue
@@ -282,16 +287,23 @@ export async function getFinancialDashboardMetrics() {
   const [accountsPayable, accountsReceivable, cashFlow] = await Promise.all([
     sumFinancialAmount('despesa', false, undefined, undefined, today),
     sumFinancialAmount('receita', false),
-    supabase.from('financial_transactions').select('type, amount, category').eq('is_paid', true).gte('paid_date', monthStart).is('deleted_at', null),
+    supabase
+      .from('financial_transactions')
+      .select('type, amount, category, cash_destination')
+      .eq('is_paid', true)
+      .gte('paid_date', monthStart)
+      .is('deleted_at', null),
   ])
 
   throwIfError(cashFlow.error, 'cash flow')
 
+  const cashRows = cashFlow.data ?? []
+
   return {
     accountsPayable,
     accountsReceivable,
-    expensesByCategory: groupByCategory(cashFlow.data ?? [], 'despesa'),
-    monthlyResult: calculateMonthlyResult(cashFlow.data ?? []),
+    expensesByCategory: groupByCategory(cashRows, 'despesa'),
+    monthlyResult: calculateMonthlyResult(cashRows),
   }
 }
 
@@ -304,8 +316,10 @@ function groupByCategory(data: { type: string; amount: number; category: string 
   return [...map.entries()].map(([category, total]) => ({ category, total }))
 }
 
-function calculateMonthlyResult(data: { type: string; amount: number }[]) {
-  const revenue = data.filter((d) => d.type === 'receita').reduce((s, d) => s + Number(d.amount), 0)
+function calculateMonthlyResult(data: { type: string; amount: number; cash_destination?: string | null }[]) {
+  const revenue = data
+    .filter((d) => d.type === 'receita' && d.cash_destination !== 'madeireira')
+    .reduce((s, d) => s + Number(d.amount), 0)
   const expense = data.filter((d) => d.type === 'despesa').reduce((s, d) => s + Number(d.amount), 0)
   return revenue - expense
 }
@@ -323,7 +337,7 @@ export async function getGlobalHeaderMetrics(): Promise<GlobalHeaderMetrics> {
   const monthEnd = format(endOfMonth(now), 'yyyy-MM-dd')
 
   const [revenues, activeOrders, receivable, criticalStock] = await Promise.all([
-    sumFinancialAmount('receita', true, monthStart, monthEnd),
+    sumFinancialAmount('receita', true, monthStart, monthEnd, undefined, 'empresa'),
     countQuery('orders', (q) => q.in('status', ACTIVE_ORDER_STATUSES).is('deleted_at', null), true),
     sumFinancialAmount('receita', false),
     countCriticalStock(),

@@ -200,6 +200,27 @@ export const PAYMENT_METHODS = [
   { value: 'outros', label: 'Outros' },
 ] as const
 
+/** Destino do valor em receitas — madeireira não conta no Dashboard Executivo */
+export const CASH_DESTINATIONS = [
+  {
+    value: 'empresa',
+    label: 'Caixa Laminê',
+    hint: 'Valor recebido pela empresa — entra no Dashboard Executivo',
+  },
+  {
+    value: 'madeireira',
+    label: 'Madeireira',
+    hint: 'Valor passado na madeireira (crédito/material) — fora do caixa Executivo',
+  },
+] as const
+
+export type CashDestination = (typeof CASH_DESTINATIONS)[number]['value']
+
+export function getCashDestinationLabel(value: string | null | undefined): string {
+  if (!value) return '—'
+  return CASH_DESTINATIONS.find((d) => d.value === value)?.label ?? value
+}
+
 export const LUMBER_CREDIT_MOVEMENT_TYPES = [
   { value: 'entrada', label: 'Entrada', hint: 'Cliente passou cartão — crédito gerado na madereira' },
   { value: 'saida', label: 'Saída', hint: 'Material retirado — desconto do crédito' },

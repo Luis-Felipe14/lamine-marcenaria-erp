@@ -49,7 +49,11 @@ export interface BudgetProposalData {
     totalValue: number
     observations?: string
     commercialTerms?: string
+    /** Modo de cálculo da entrada no PDF */
+    entradaMode: 'percent' | 'value'
     entradaPercent: number
+    /** Valor fixo quando entradaMode = value */
+    entradaValue: number
     manufacturingTimeline?: string
     installationTimeline?: string
     responsibleName?: string

@@ -4,7 +4,7 @@ import { PAGE_SIZE } from '@/lib/constants'
 import { paginatedQuery } from '@/services/api'
 
 const TRANSACTION_SELECT =
-  'id, type, category, description, amount, due_date, is_paid, paid_date, client_id, order_id, purchase_id, employee_id, payment_method, notes, supplier_id, document_number, installment_number, installment_total, client:clients(name), order:orders(number), purchase:purchases(number, description, supplier_id, invoice_number), supplier:suppliers(name), employee:employees(name, position)'
+  'id, type, category, description, amount, due_date, is_paid, paid_date, client_id, order_id, purchase_id, employee_id, payment_method, notes, supplier_id, document_number, installment_number, installment_total, cash_destination, client:clients(name), order:orders(number), purchase:purchases(number, description, supplier_id, invoice_number), supplier:suppliers(name), employee:employees(name, position)'
 
 export interface FinancialTransaction {
   id: string
@@ -25,6 +25,7 @@ export interface FinancialTransaction {
   document_number: string | null
   installment_number: number | null
   installment_total: number | null
+  cash_destination: string
   client?: { name: string } | null
   order?: { number: number } | null
   purchase?: { number: number; description: string | null; supplier_id: string | null; invoice_number: string | null } | null

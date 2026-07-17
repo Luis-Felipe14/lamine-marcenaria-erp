@@ -119,6 +119,8 @@ export interface Database {
           notes: string | null
           commercial_terms: string | null
           entrada_percent: number
+          entrada_mode: string
+          entrada_value: number | null
           manufacturing_timeline: string | null
           installation_timeline: string | null
           proposal_template: string
@@ -300,6 +302,7 @@ export interface Database {
           document_number: string | null
           installment_number: number | null
           installment_total: number | null
+          cash_destination: string
           created_at: string
           updated_at: string
           deleted_at: string | null

@@ -1,4 +1,4 @@
-import { FINANCIAL_CATEGORIES } from '@/lib/constants'
+import { FINANCIAL_CATEGORIES, type CashDestination } from '@/lib/constants'
 
 export type FinancialFormType = 'receita' | 'despesa'
 
@@ -18,6 +18,7 @@ export interface FinancialFormState {
   document_number: string
   installment_number: number | ''
   installment_total: number | ''
+  cash_destination: CashDestination
 }
 
 export type FinancialFieldKey =
@@ -30,6 +31,7 @@ export type FinancialFieldKey =
   | 'payment_method'
   | 'installment_number'
   | 'installment_total'
+  | 'cash_destination'
   | 'notes'
   | 'description'
   | 'amount'
@@ -61,6 +63,7 @@ export function createEmptyFinancialForm(type: FinancialFormType = 'receita'): F
     document_number: '',
     installment_number: '',
     installment_total: '',
+    cash_destination: 'empresa',
   }
 }
 
@@ -171,6 +174,13 @@ const CORE_RULES: Record<FinancialFieldKey, FinancialFieldRule> = {
   document_number: { visible: false, required: false, label: 'Nº documento / NF', section: 'payment' },
   installment_number: { visible: false, required: false, label: 'Parcela', section: 'payment' },
   installment_total: { visible: false, required: false, label: 'Total de parcelas', section: 'payment' },
+  cash_destination: {
+    visible: false,
+    required: false,
+    label: 'Destino do valor',
+    section: 'core',
+    hint: 'Madeireira não entra no caixa do Dashboard Executivo',
+  },
   notes: { visible: true, required: false, label: 'Observações', placeholder: 'Informações adicionais...', section: 'notes' },
 }
 
@@ -194,6 +204,7 @@ export function getFinancialFormFields(
   if (form.type === 'despesa') {
     fields.client_id = { ...fields.client_id, visible: false }
     fields.order_id = { ...fields.order_id, visible: false }
+    fields.cash_destination = { ...fields.cash_destination, visible: false, required: false }
     if (form.category === 'salario') {
       fields.description = { ...fields.description, visible: false, required: false }
     }
@@ -201,6 +212,13 @@ export function getFinancialFormFields(
     fields.supplier_id = { ...fields.supplier_id, visible: false }
     fields.purchase_id = { ...fields.purchase_id, visible: false }
     fields.employee_id = { ...fields.employee_id, visible: false }
+    fields.cash_destination = {
+      ...fields.cash_destination,
+      visible: true,
+      required: true,
+      label: 'Destino do valor',
+      hint: 'Madeireira = crédito/material — não conta no Dashboard Executivo',
+    }
   }
 
   if (form.payment_method) {
@@ -337,6 +355,7 @@ export function sanitizeFinancialPayload(
     installment_total: fields.installment_total.visible && form.installment_total !== ''
       ? Number(form.installment_total)
       : null,
+    cash_destination: form.type === 'receita' ? form.cash_destination : 'empresa',
   }
 }
 
@@ -345,6 +364,9 @@ export function applyFinancialFormContextChange(
   patch: Partial<FinancialFormState>,
 ): FinancialFormState {
   const next = { ...form, ...patch }
+  if (next.type === 'despesa') {
+    next.cash_destination = 'empresa'
+  }
   const fields = getFinancialFormFields(next)
   return clearHiddenFinancialFields(next, fields)
 }

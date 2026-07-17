@@ -1,5 +1,10 @@
 import type { BudgetProposalData } from '@/pdf/types'
 import { formatCurrency } from '@/lib/utils'
+import {
+  formatEntradaPercentLabel,
+  parseBudgetEntradaMode,
+  resolveBudgetEntradaAmount,
+} from '@/lib/budget-entrada'
 
 interface ProposalSidebarProps {
   data: BudgetProposalData
@@ -7,12 +12,17 @@ interface ProposalSidebarProps {
 
 export function ProposalSidebar({ data }: ProposalSidebarProps) {
   const { budget, environments } = data
-  const entradaPercent = Math.min(100, Math.max(0, budget.entradaPercent))
-  const entrada = budget.totalValue * (entradaPercent / 100)
-  const saldo = budget.totalValue - entrada
-  const entradaLabel = Number.isInteger(entradaPercent)
-    ? `${entradaPercent}%`
-    : `${entradaPercent.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`
+  const entradaMode = parseBudgetEntradaMode(budget.entradaMode)
+  const entrada = resolveBudgetEntradaAmount(
+    budget.totalValue,
+    entradaMode,
+    budget.entradaPercent,
+    budget.entradaValue,
+  )
+  const saldo = Math.max(0, budget.totalValue - entrada)
+  const entradaLabel = entradaMode === 'value'
+    ? 'valor'
+    : formatEntradaPercentLabel(budget.entradaPercent)
 
   return (
     <aside className="proposal-sidebar">

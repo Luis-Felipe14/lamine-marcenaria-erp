@@ -14,6 +14,8 @@ import { Badge } from '@/components/ui/badge'
 import {
   getFinancialCategoryLabel,
   getPaymentMethodLabel,
+  getCashDestinationLabel,
+  type CashDestination,
 } from '@/lib/constants'
 import {
   createEmptyFinancialForm,
@@ -107,6 +109,7 @@ export function FinancialPage() {
       document_number: row.document_number ?? '',
       installment_number: row.installment_number ?? '',
       installment_total: row.installment_total ?? '',
+      cash_destination: (row.cash_destination === 'madeireira' ? 'madeireira' : 'empresa') as CashDestination,
     })
     setDialogOpen(true)
   }
@@ -164,6 +167,7 @@ export function FinancialPage() {
                 purchase_id: null,
                 supplier_id: null,
                 employee_id: null,
+                cash_destination: 'empresa',
               })
               remainingCreated = true
             }
@@ -295,6 +299,13 @@ export function FinancialPage() {
           { key: 'document_number', header: 'NF', render: (r) => r.document_number || '—' },
           { key: 'installment', header: 'Parcelas', render: (r) => formatInstallment(r.installment_number, r.installment_total) },
           { key: 'payment_method', header: 'Pagamento', render: (r) => getPaymentMethodLabel(r.payment_method) },
+          {
+            key: 'cash_destination',
+            header: 'Destino',
+            render: (r) => r.type === 'receita'
+              ? getCashDestinationLabel(r.cash_destination)
+              : '—',
+          },
           { key: 'amount', header: 'Valor', render: (r) => formatCurrency(r.amount) },
           { key: 'due_date', header: 'Vencimento', render: (r) => formatDate(r.due_date) },
           {

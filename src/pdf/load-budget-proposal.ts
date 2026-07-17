@@ -136,6 +136,8 @@ export async function loadBudgetProposalData(
     notes?: string | null
     commercial_terms?: string | null
     entrada_percent?: number | null
+    entrada_mode?: string | null
+    entrada_value?: number | null
     manufacturing_timeline?: string | null
     installation_timeline?: string | null
     proposal_template?: string | null
@@ -165,7 +167,9 @@ export async function loadBudgetProposalData(
       totalValue,
       observations: budgetRow.notes?.trim() || undefined,
       commercialTerms: budgetRow.commercial_terms?.trim() || DEFAULT_COMMERCIAL_TERMS,
+      entradaMode: budgetRow.entrada_mode === 'value' ? 'value' : 'percent',
       entradaPercent: Number(budgetRow.entrada_percent ?? DEFAULT_ENTRADA_PERCENT),
+      entradaValue: Number(budgetRow.entrada_value ?? 0),
       manufacturingTimeline: budgetRow.manufacturing_timeline?.trim() || DEFAULT_MANUFACTURING_TIMELINE,
       installationTimeline: budgetRow.installation_timeline?.trim() || DEFAULT_INSTALLATION_TIMELINE,
       responsibleName: responsible?.full_name?.trim() || undefined,

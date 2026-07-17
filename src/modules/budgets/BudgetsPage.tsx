@@ -32,6 +32,13 @@ import {
   DEFAULT_MANUFACTURING_TIMELINE,
 } from '@/pdf/defaults'
 import type { BudgetProposalDetailMode } from '@/pdf/types'
+import {
+  clampEntradaPercent,
+  parseBudgetEntradaMode,
+  parseEntradaPercentInput,
+  resolveBudgetEntradaAmount,
+  type BudgetEntradaMode,
+} from '@/lib/budget-entrada'
 import { useConfirm } from '@/hooks/useConfirm'
 import { useBudgets, useLookupClients } from '@/hooks/useQueries'
 import type { Budget } from '@/services/budgets.service'
@@ -83,14 +90,15 @@ const emptyForm = () => ({
   discount: 0,
   notes: '',
   commercial_terms: DEFAULT_COMMERCIAL_TERMS,
+  entrada_mode: 'percent' as BudgetEntradaMode,
   entrada_percent: DEFAULT_ENTRADA_PERCENT,
+  entrada_percent_text: String(DEFAULT_ENTRADA_PERCENT),
+  entrada_value: 0,
   manufacturing_timeline: DEFAULT_MANUFACTURING_TIMELINE,
   installation_timeline: DEFAULT_INSTALLATION_TIMELINE,
   proposal_detail_mode: 'items' as BudgetProposalDetailMode,
   environments: [emptyEnvironment()],
 })
-
-const BUDGET_LOCKED_STATUSES = ['convertido_pedido', 'aprovado'] as const
 
 function environmentSellingTotal(env: BudgetEnvironmentForm) {
   return Number(env.subtotal) || 0
@@ -148,8 +156,12 @@ export function BudgetsPage() {
 
   const calculateTotal = () => projectSellingTotal(form.environments) - form.discount
 
-  const isBudgetLocked = (status: string) =>
-    (BUDGET_LOCKED_STATUSES as readonly string[]).includes(status)
+  const entradaPreview = resolveBudgetEntradaAmount(
+    calculateTotal(),
+    form.entrada_mode,
+    form.entrada_percent,
+    form.entrada_value,
+  )
 
   const openCreate = () => {
     setEditing(null)
@@ -158,10 +170,6 @@ export function BudgetsPage() {
   }
 
   const openEdit = async (budget: Budget) => {
-    if (isBudgetLocked(budget.status)) {
-      toast.error('Orçamentos convertidos em pedido não podem ser editados')
-      return
-    }
     setEditing(budget)
     setDialogOpen(true)
     setFormLoading(true)
@@ -184,6 +192,8 @@ export function BudgetsPage() {
         environment: string | null
         commercial_terms: string | null
         entrada_percent: number | null
+        entrada_mode: string | null
+        entrada_value: number | null
         manufacturing_timeline: string | null
         installation_timeline: string | null
         proposal_detail_mode: string | null
@@ -244,6 +254,7 @@ export function BudgetsPage() {
         items: env.items.length > 0 ? env.items : [emptyItem()],
       }))
 
+      const entradaPercent = clampEntradaPercent(Number(row.entrada_percent ?? DEFAULT_ENTRADA_PERCENT))
       setForm({
         client_id: row.client_id,
         project_name: row.project_name,
@@ -251,7 +262,10 @@ export function BudgetsPage() {
         discount: row.discount ?? 0,
         notes: row.notes ?? '',
         commercial_terms: row.commercial_terms?.trim() || DEFAULT_COMMERCIAL_TERMS,
-        entrada_percent: Number(row.entrada_percent ?? DEFAULT_ENTRADA_PERCENT),
+        entrada_mode: parseBudgetEntradaMode(row.entrada_mode),
+        entrada_percent: entradaPercent,
+        entrada_percent_text: String(entradaPercent).replace('.', ','),
+        entrada_value: Number(row.entrada_value ?? 0),
         manufacturing_timeline: row.manufacturing_timeline?.trim() || DEFAULT_MANUFACTURING_TIMELINE,
         installation_timeline: row.installation_timeline?.trim() || DEFAULT_INSTALLATION_TIMELINE,
         proposal_detail_mode: parseDetailMode(row.proposal_detail_mode),
@@ -369,6 +383,10 @@ export function BudgetsPage() {
     try {
       const materials_cost = projectSellingTotal(form.environments)
       const primaryEnvironment = form.environments.find((env) => env.name.trim())?.name.trim() ?? null
+      const totalValue = calculateTotal()
+      const entradaMode = form.entrada_mode
+      const entradaPercent = clampEntradaPercent(form.entrada_percent)
+      const entradaValue = Math.max(0, Number(form.entrada_value) || 0)
       const payload = {
         client_id: form.client_id,
         project_name: form.project_name.trim(),
@@ -377,10 +395,12 @@ export function BudgetsPage() {
         labor_cost: 0,
         materials_cost,
         discount: form.discount,
-        total_value: calculateTotal(),
+        total_value: totalValue,
         notes: form.notes.trim() || null,
         commercial_terms: form.commercial_terms.trim() || null,
-        entrada_percent: Math.min(100, Math.max(0, form.entrada_percent)),
+        entrada_mode: entradaMode,
+        entrada_percent: entradaPercent,
+        entrada_value: entradaMode === 'value' ? entradaValue : null,
         manufacturing_timeline: form.manufacturing_timeline.trim() || null,
         installation_timeline: form.installation_timeline.trim() || null,
         proposal_template: 'premium',
@@ -390,6 +410,17 @@ export function BudgetsPage() {
       if (editing) {
         await updateRecord('budgets', editing.id, payload)
         await saveBudgetEnvironments(editing.id)
+        if (editing.status === 'convertido_pedido' || editing.status === 'aprovado') {
+          const { data: linkedOrders, error: ordersError } = await supabase
+            .from('orders')
+            .select('id')
+            .eq('budget_id', editing.id)
+            .is('deleted_at', null)
+          if (ordersError) throw ordersError
+          for (const order of linkedOrders ?? []) {
+            await updateRecord('orders', order.id, { value: totalValue })
+          }
+        }
         toast.success('Orçamento atualizado!')
       } else {
         const budget = await createRecord('budgets', {
@@ -756,29 +787,87 @@ export function BudgetsPage() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="space-y-3">
                     <div>
-                      <Label>Percentual de entrada (%)</Label>
-                      <Input
-                        type="number"
-                        min={0}
-                        max={100}
-                        step={1}
-                        value={form.entrada_percent}
-                        onChange={(e) => {
-                          const parsed = Number(e.target.value)
-                          setForm({
-                            ...form,
-                            entrada_percent: Number.isFinite(parsed)
-                              ? Math.min(100, Math.max(0, parsed))
-                              : DEFAULT_ENTRADA_PERCENT,
-                          })
-                        }}
-                      />
-                      <p className="mt-1 text-xs text-gray-500">
-                        Usado no card de entrada do PDF ({formatCurrency(calculateTotal() * (form.entrada_percent / 100))} de {formatCurrency(calculateTotal())})
-                      </p>
+                      <Label>Entrada</Label>
+                      <div className="mt-1.5 grid grid-cols-2 gap-2">
+                        <Button
+                          type="button"
+                          variant={form.entrada_mode === 'percent' ? 'default' : 'outline'}
+                          className="h-auto justify-start whitespace-normal px-3 py-2 text-left"
+                          onClick={() => setForm({ ...form, entrada_mode: 'percent' })}
+                        >
+                          <span className="block">
+                            <span className="font-medium">Percentual</span>
+                            <span className="mt-0.5 block text-xs opacity-80">Ex.: 30% ou 30,5%</span>
+                          </span>
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={form.entrada_mode === 'value' ? 'default' : 'outline'}
+                          className="h-auto justify-start whitespace-normal px-3 py-2 text-left"
+                          onClick={() => {
+                            const total = calculateTotal()
+                            const nextValue = form.entrada_value > 0
+                              ? form.entrada_value
+                              : resolveBudgetEntradaAmount(total, 'percent', form.entrada_percent, 0)
+                            setForm({ ...form, entrada_mode: 'value', entrada_value: nextValue })
+                          }}
+                        >
+                          <span className="block">
+                            <span className="font-medium">Valor fixo</span>
+                            <span className="mt-0.5 block text-xs opacity-80">Informar R$ direto</span>
+                          </span>
+                        </Button>
+                      </div>
                     </div>
+                    {form.entrada_mode === 'percent' ? (
+                      <div>
+                        <Label>Percentual de entrada (%)</Label>
+                        <Input
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="Ex.: 30,5"
+                          value={form.entrada_percent_text}
+                          onChange={(e) => {
+                            const text = e.target.value
+                            const parsed = parseEntradaPercentInput(text)
+                            setForm({
+                              ...form,
+                              entrada_percent_text: text,
+                              entrada_percent: parsed ?? form.entrada_percent,
+                            })
+                          }}
+                          onBlur={() => {
+                            const parsed = parseEntradaPercentInput(form.entrada_percent_text)
+                            const percent = parsed ?? clampEntradaPercent(form.entrada_percent)
+                            setForm({
+                              ...form,
+                              entrada_percent: percent,
+                              entrada_percent_text: String(percent).replace('.', ','),
+                            })
+                          }}
+                        />
+                        <p className="mt-1 text-xs text-gray-500">
+                          Usado no PDF ({formatCurrency(entradaPreview)} de {formatCurrency(calculateTotal())})
+                        </p>
+                      </div>
+                    ) : (
+                      <div>
+                        <Label>Valor de entrada</Label>
+                        <CurrencyInput
+                          value={form.entrada_value}
+                          onChange={(entrada_value) => setForm({ ...form, entrada_value })}
+                        />
+                        <p className="mt-1 text-xs text-gray-500">
+                          Usado no PDF ({formatCurrency(entradaPreview)}
+                          {calculateTotal() > 0
+                            ? ` — saldo ${formatCurrency(Math.max(0, calculateTotal() - entradaPreview))}`
+                            : ''}
+                          )
+                        </p>
+                      </div>
+                    )}
                   </div>
                   <div>
                     <Label>Condições comerciais</Label>
@@ -844,11 +933,9 @@ export function BudgetsPage() {
           { key: 'status', header: 'Status', render: (r) => <Badge>{getBudgetStatusLabel(r.status)}</Badge> },
           { key: 'actions', header: '', render: (r) => (
             <div className="flex gap-1">
-              {!isBudgetLocked(r.status) && (
-                <Button variant="ghost" size="icon" title="Editar" onClick={(e) => { e.stopPropagation(); void openEdit(r) }}>
-                  <Pencil className="h-4 w-4" />
-                </Button>
-              )}
+              <Button variant="ghost" size="icon" title="Editar" onClick={(e) => { e.stopPropagation(); void openEdit(r) }}>
+                <Pencil className="h-4 w-4" />
+              </Button>
               <Button variant="ghost" size="icon" title="Exportar PDF" onClick={(e) => { e.stopPropagation(); openPdfDialog(r) }}><FileDown className="h-4 w-4" /></Button>
               <Select
                 value={r.status === 'aprovado' ? 'convertido_pedido' : r.status}

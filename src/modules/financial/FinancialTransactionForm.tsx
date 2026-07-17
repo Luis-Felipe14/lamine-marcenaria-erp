@@ -10,6 +10,8 @@ import {
   SELECT_NONE,
   getFinancialCategoryHint,
   PAYMENT_METHODS,
+  CASH_DESTINATIONS,
+  type CashDestination,
 } from '@/lib/constants'
 import {
   applyFinancialFormContextChange,
@@ -143,6 +145,7 @@ export function FinancialTransactionForm({
                 document_number: '',
                 installment_number: '',
                 installment_total: '',
+                cash_destination: 'empresa',
               })
             }}
           >
@@ -369,6 +372,32 @@ export function FinancialTransactionForm({
             </div>
           )}
         </div>
+
+        {fields.cash_destination.visible && (
+          <div>
+            <Label>
+              {fields.cash_destination.label}
+              {fields.cash_destination.required && ' *'}
+            </Label>
+            <Select
+              value={form.cash_destination}
+              onValueChange={(v) => setForm({ ...form, cash_destination: v as CashDestination })}
+            >
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {CASH_DESTINATIONS.map((d) => (
+                  <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <FieldHint
+              text={
+                CASH_DESTINATIONS.find((d) => d.value === form.cash_destination)?.hint
+                ?? fields.cash_destination.hint
+              }
+            />
+          </div>
+        )}
       </FormSection>
 
       <FormSection title="Forma de pagamento">
