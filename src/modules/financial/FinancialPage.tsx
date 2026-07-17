@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { Plus, Pencil, TrendingUp, TrendingDown, Trash2 } from 'lucide-react'
+import { Plus, Pencil, TrendingUp, TrendingDown, Trash2, ListOrdered } from 'lucide-react'
 import { toast } from 'sonner'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
@@ -27,7 +27,13 @@ import {
 import { formatCurrency, formatDate, formatInstallment, getDueUrgency, getDueUrgencyLabel } from '@/lib/utils'
 import { invalidateDashboardMetrics } from '@/lib/invalidate-dashboard'
 import { createRecord, updateRecord, softDelete } from '@/services/api'
-import type { FinancialTransaction } from '@/services/financial.service'
+import {
+  createInstallmentPlanTransaction,
+  listInstallmentSchedules,
+  markInstallmentPaid,
+  type FinancialInstallmentSchedule,
+  type FinancialTransaction,
+} from '@/services/financial.service'
 import {
   useFinancialSummary,
   useFinancialSettings,
@@ -55,6 +61,11 @@ export function FinancialPage() {
   const [editing, setEditing] = useState<Transaction | null>(null)
   const [form, setForm] = useState<FinancialFormState>(createEmptyFinancialForm())
   const [submitting, setSubmitting] = useState(false)
+  const [scheduleOpen, setScheduleOpen] = useState(false)
+  const [scheduleTx, setScheduleTx] = useState<Transaction | null>(null)
+  const [schedules, setSchedules] = useState<FinancialInstallmentSchedule[]>([])
+  const [scheduleLoading, setScheduleLoading] = useState(false)
+  const [payingScheduleId, setPayingScheduleId] = useState<string | null>(null)
 
   const { data: txResult, isLoading, isFetching } = useFinancialTransactions(page, filter)
   const { data: summary = { receitas: 0, despesas: 0, aPagar: 0, aReceber: 0 } } = useFinancialSummary()
@@ -97,7 +108,7 @@ export function FinancialPage() {
       type: row.type as 'receita' | 'despesa',
       category: row.category,
       description: row.description,
-      amount: Number(row.amount),
+      amount: Number(row.is_installment_plan ? (row.plan_total_amount ?? row.amount) : row.amount),
       due_date: row.due_date ?? '',
       client_id: row.client_id ?? '',
       order_id: row.order_id ?? '',
@@ -112,6 +123,22 @@ export function FinancialPage() {
       cash_destination: (row.cash_destination === 'madeireira' ? 'madeireira' : 'empresa') as CashDestination,
     })
     setDialogOpen(true)
+  }
+
+  const openSchedule = async (row: Transaction) => {
+    setScheduleTx(row)
+    setScheduleOpen(true)
+    setScheduleLoading(true)
+    try {
+      const rows = await listInstallmentSchedules(row.id)
+      setSchedules(rows)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao carregar parcelas')
+      setScheduleOpen(false)
+      setScheduleTx(null)
+    } finally {
+      setScheduleLoading(false)
+    }
   }
 
   const onSubmit = async () => {
@@ -139,8 +166,22 @@ export function FinancialPage() {
       const selectedEmployee = employees.find((e) => e.id === form.employee_id)
       const payload = sanitizeFinancialPayload(form, selectedEmployee?.name ?? form.description)
       if (editing) {
-        await updateRecord('financial_transactions', editing.id, payload)
-        toast.success('Lançamento atualizado!')
+        if (editing.is_installment_plan) {
+          await updateRecord('financial_transactions', editing.id, {
+            description: payload.description,
+            supplier_id: payload.supplier_id,
+            payment_method: payload.payment_method,
+            notes: payload.notes,
+            document_number: payload.document_number,
+          })
+          toast.success('Lançamento atualizado! (cronograma de parcelas preservado)')
+        } else {
+          await updateRecord('financial_transactions', editing.id, payload)
+          toast.success('Lançamento atualizado!')
+        }
+      } else if (form.type === 'despesa' && form.category === 'maquinario') {
+        await createInstallmentPlanTransaction(payload)
+        toast.success('Maquinário lançado com cronograma de parcelas!')
       } else {
         await createRecord('financial_transactions', { ...payload, is_paid: false })
 
@@ -190,13 +231,37 @@ export function FinancialPage() {
     }
   }
 
-  const markPaid = async (id: string) => {
+  const markPaid = async (row: Transaction) => {
     try {
-      await updateRecord('financial_transactions', id, { is_paid: true, paid_date: new Date().toISOString().split('T')[0] })
-      toast.success('Pagamento confirmado!')
+      if (row.is_installment_plan) {
+        await markInstallmentPaid(row.id)
+        toast.success('Parcela confirmada!')
+      } else {
+        await updateRecord('financial_transactions', row.id, {
+          is_paid: true,
+          paid_date: new Date().toISOString().split('T')[0],
+        })
+        toast.success('Pagamento confirmado!')
+      }
       await invalidateFinancial()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao confirmar pagamento')
+    }
+  }
+
+  const confirmScheduleInstallment = async (scheduleId: string) => {
+    if (!scheduleTx) return
+    setPayingScheduleId(scheduleId)
+    try {
+      await markInstallmentPaid(scheduleTx.id, scheduleId)
+      const rows = await listInstallmentSchedules(scheduleTx.id)
+      setSchedules(rows)
+      toast.success('Parcela confirmada!')
+      await invalidateFinancial()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao confirmar parcela')
+    } finally {
+      setPayingScheduleId(null)
     }
   }
 
@@ -263,6 +328,11 @@ export function FinancialPage() {
                 suppliers={suppliers}
                 employees={employees}
               />
+              {editing?.is_installment_plan && (
+                <p className="mt-2 text-xs text-gray-500">
+                  O cronograma de parcelas não é recalculado na edição — use &quot;Ver parcelas&quot; para pagar cada mês.
+                </p>
+              )}
             </DialogContent>
           </Dialog>
         }
@@ -297,7 +367,13 @@ export function FinancialPage() {
           { key: 'link', header: 'Vínculo', render: (r) => <span className="text-xs text-gray-400">{linkLabel(r)}</span> },
           { key: 'category', header: 'Categoria', render: (r) => getFinancialCategoryLabel(r.category) },
           { key: 'document_number', header: 'NF', render: (r) => r.document_number || '—' },
-          { key: 'installment', header: 'Parcelas', render: (r) => formatInstallment(r.installment_number, r.installment_total) },
+          {
+            key: 'installment',
+            header: 'Parcelas',
+            render: (r) => r.is_installment_plan
+              ? `${r.installment_total ?? '—'}x`
+              : formatInstallment(r.installment_number, r.installment_total),
+          },
           { key: 'payment_method', header: 'Pagamento', render: (r) => getPaymentMethodLabel(r.payment_method) },
           {
             key: 'cash_destination',
@@ -306,7 +382,20 @@ export function FinancialPage() {
               ? getCashDestinationLabel(r.cash_destination)
               : '—',
           },
-          { key: 'amount', header: 'Valor', render: (r) => formatCurrency(r.amount) },
+          {
+            key: 'amount',
+            header: 'Valor',
+            render: (r) => (
+              <div className="flex flex-col">
+                <span>{formatCurrency(r.amount)}</span>
+                {r.is_installment_plan && r.plan_total_amount != null && (
+                  <span className="text-[10px] text-gray-500">
+                    Total {formatCurrency(Number(r.plan_total_amount))}
+                  </span>
+                )}
+              </div>
+            ),
+          },
           {
             key: 'due_date',
             header: 'Vencimento',
@@ -344,7 +433,9 @@ export function FinancialPage() {
               const urgency = getDueUrgency(r.due_date, false)
               return (
                 <div className="flex flex-col items-start gap-1">
-                  <Button size="sm" variant="outline" onClick={() => markPaid(r.id)}>Confirmar</Button>
+                  <Button size="sm" variant="outline" onClick={() => void markPaid(r)}>
+                    {r.is_installment_plan ? 'Pagar parcela' : 'Confirmar'}
+                  </Button>
                   {urgency === 'overdue' && (
                     <span className="text-[10px] font-medium uppercase tracking-wide text-red-400">Em atraso</span>
                   )}
@@ -357,6 +448,18 @@ export function FinancialPage() {
             header: '',
             render: (r) => (
               <div className="flex gap-1">
+                {r.is_installment_plan && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => void openSchedule(r)}
+                    aria-label="Ver parcelas"
+                    title="Ver cronograma"
+                  >
+                    <ListOrdered className="h-3.5 w-3.5" />
+                  </Button>
+                )}
                 <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(r)} aria-label="Editar">
                   <Pencil className="h-3.5 w-3.5" />
                 </Button>
@@ -374,6 +477,77 @@ export function FinancialPage() {
         onPageChange={setPage}
       />
       </PageDataZone>
+
+      <Dialog
+        open={scheduleOpen}
+        onOpenChange={(open) => {
+          setScheduleOpen(open)
+          if (!open) {
+            setScheduleTx(null)
+            setSchedules([])
+          }
+        }}
+      >
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              Parcelas — {scheduleTx?.description ?? 'Lançamento'}
+            </DialogTitle>
+          </DialogHeader>
+          {scheduleLoading ? (
+            <p className="text-sm text-gray-500">Carregando cronograma...</p>
+          ) : (
+            <div className="space-y-2">
+              {scheduleTx?.plan_total_amount != null && (
+                <p className="text-xs text-gray-500">
+                  Total do bem: {formatCurrency(Number(scheduleTx.plan_total_amount))}
+                  {scheduleTx.installment_total ? ` · ${scheduleTx.installment_total}x` : ''}
+                </p>
+              )}
+              {schedules.map((s) => {
+                const urgency = getDueUrgency(s.due_date, s.is_paid)
+                const label = getDueUrgencyLabel(urgency, s.due_date)
+                return (
+                  <div
+                    key={s.id}
+                    className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium">
+                        Parcela {s.installment_number}
+                        <span className="ml-2 text-gray-400">{formatCurrency(s.amount)}</span>
+                      </p>
+                      <p className={`text-xs ${
+                        urgency === 'overdue' || urgency === 'today'
+                          ? 'text-red-400'
+                          : urgency === 'soon'
+                            ? 'text-yellow-400'
+                            : 'text-gray-500'
+                      }`}>
+                        Venc. {formatDate(s.due_date)}
+                        {label ? ` · ${label}` : ''}
+                        {s.is_paid && s.paid_date ? ` · Pago em ${formatDate(s.paid_date)}` : ''}
+                      </p>
+                    </div>
+                    {s.is_paid ? (
+                      <Badge variant="success">Paga</Badge>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={payingScheduleId === s.id}
+                        onClick={() => void confirmScheduleInstallment(s.id)}
+                      >
+                        {payingScheduleId === s.id ? '...' : 'Pagar'}
+                      </Button>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <ConfirmDialog {...dialogProps} />
     </PageContent>

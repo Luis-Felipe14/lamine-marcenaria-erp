@@ -159,6 +159,7 @@ export const FINANCIAL_CATEGORIES = {
   despesa: [
     { value: 'salario', label: 'Salários', hint: 'Folha de pagamento e encargos' },
     { value: 'compra', label: 'Compras / Materiais', hint: 'Materiais, insumos e fretes' },
+    { value: 'maquinario', label: 'Maquinário', hint: 'Equipamentos e máquinas (compra parcelada com cronograma)' },
     { value: 'contas_fixas', label: 'Contas fixas', hint: 'Aluguel, energia, água, internet' },
     { value: 'marketing', label: 'Marketing', hint: 'Investimentos em divulgação' },
     { value: 'outros', label: 'Outros', hint: 'Demais despesas' },
@@ -173,6 +174,7 @@ export const FINANCIAL_CATEGORY_LABELS: Record<string, string> = {
   outros: 'Outros',
   salario: 'Salários',
   compra: 'Compras / Materiais',
+  maquinario: 'Maquinário',
   contas_fixas: 'Contas fixas',
   energia: 'Contas fixas',
   agua: 'Contas fixas',

@@ -2,9 +2,10 @@ import { supabase } from '@/lib/supabase'
 import { throwIfError } from '@/lib/supabase-helpers'
 import { PAGE_SIZE } from '@/lib/constants'
 import { paginatedQuery } from '@/services/api'
+import { buildEqualInstallmentSchedule } from '@/lib/financial-installments'
 
 const TRANSACTION_SELECT =
-  'id, type, category, description, amount, due_date, is_paid, paid_date, client_id, order_id, purchase_id, employee_id, payment_method, notes, supplier_id, document_number, installment_number, installment_total, cash_destination, client:clients(name), order:orders(number), purchase:purchases(number, description, supplier_id, invoice_number), supplier:suppliers(name), employee:employees(name, position)'
+  'id, type, category, description, amount, due_date, is_paid, paid_date, client_id, order_id, purchase_id, employee_id, payment_method, notes, supplier_id, document_number, installment_number, installment_total, cash_destination, is_installment_plan, plan_total_amount, client:clients(name), order:orders(number), purchase:purchases(number, description, supplier_id, invoice_number), supplier:suppliers(name), employee:employees(name, position)'
 
 export interface FinancialTransaction {
   id: string
@@ -26,11 +27,23 @@ export interface FinancialTransaction {
   installment_number: number | null
   installment_total: number | null
   cash_destination: string
+  is_installment_plan: boolean
+  plan_total_amount: number | null
   client?: { name: string } | null
   order?: { number: number } | null
   purchase?: { number: number; description: string | null; supplier_id: string | null; invoice_number: string | null } | null
   supplier?: { name: string } | null
   employee?: { name: string; position: string | null } | null
+}
+
+export interface FinancialInstallmentSchedule {
+  id: string
+  transaction_id: string
+  installment_number: number
+  amount: number
+  due_date: string
+  is_paid: boolean
+  paid_date: string | null
 }
 
 export interface FinancialSummary {
@@ -68,6 +81,111 @@ export async function listFinancialTransactions(
       filters: (q) => (filter === 'all' ? q : q.eq('type', filter)),
     }
   )
+}
+
+export async function listInstallmentSchedules(transactionId: string): Promise<FinancialInstallmentSchedule[]> {
+  const { data, error } = await supabase
+    .from('financial_installment_schedules')
+    .select('id, transaction_id, installment_number, amount, due_date, is_paid, paid_date')
+    .eq('transaction_id', transactionId)
+    .order('installment_number', { ascending: true })
+
+  throwIfError(error, 'cronograma de parcelas')
+  return (data ?? []).map((row) => ({
+    ...row,
+    amount: Number(row.amount),
+  }))
+}
+
+export async function createInstallmentPlanTransaction(
+  payload: Record<string, unknown>,
+): Promise<FinancialTransaction> {
+  const total = Number(payload.plan_total_amount ?? payload.amount) || 0
+  const count = Number(payload.installment_total) || 0
+  const firstDue = String(payload.due_date ?? '')
+  const schedule = buildEqualInstallmentSchedule(total, count, firstDue)
+  const remaining = schedule.reduce((sum, row) => sum + row.amount, 0)
+
+  const { data: created, error } = await supabase
+    .from('financial_transactions')
+    .insert({
+      ...payload,
+      amount: remaining,
+      due_date: schedule[0]?.due_date ?? firstDue,
+      is_paid: false,
+      is_installment_plan: true,
+      plan_total_amount: total,
+      installment_total: count,
+      installment_number: null,
+    })
+    .select(TRANSACTION_SELECT)
+    .single()
+
+  throwIfError(error, 'lançamento parcelado')
+
+  const { error: scheduleError } = await supabase
+    .from('financial_installment_schedules')
+    .insert(schedule.map((row) => ({
+      transaction_id: created.id,
+      installment_number: row.installment_number,
+      amount: row.amount,
+      due_date: row.due_date,
+      is_paid: false,
+    })))
+
+  if (scheduleError) {
+    await supabase.from('financial_transactions').delete().eq('id', created.id)
+    throwIfError(scheduleError, 'cronograma de parcelas')
+  }
+
+  return created as FinancialTransaction
+}
+
+async function syncParentFromSchedules(transactionId: string): Promise<void> {
+  const schedules = await listInstallmentSchedules(transactionId)
+  const unpaid = schedules.filter((s) => !s.is_paid)
+  const remaining = unpaid.reduce((sum, s) => sum + s.amount, 0)
+  const nextDue = unpaid[0]?.due_date ?? schedules[schedules.length - 1]?.due_date ?? null
+  const allPaid = unpaid.length === 0
+
+  const { error } = await supabase
+    .from('financial_transactions')
+    .update({
+      amount: remaining,
+      due_date: nextDue,
+      is_paid: allPaid,
+      paid_date: allPaid ? new Date().toISOString().split('T')[0] : null,
+    })
+    .eq('id', transactionId)
+
+  throwIfError(error, 'atualizar lançamento parcelado')
+}
+
+/** Confirma a próxima parcela em aberto (ou uma parcela específica). */
+export async function markInstallmentPaid(
+  transactionId: string,
+  scheduleId?: string,
+): Promise<void> {
+  const schedules = await listInstallmentSchedules(transactionId)
+  const target = scheduleId
+    ? schedules.find((s) => s.id === scheduleId)
+    : schedules.find((s) => !s.is_paid)
+
+  if (!target) {
+    throw new Error('Nenhuma parcela pendente para confirmar')
+  }
+  if (target.is_paid) {
+    throw new Error('Esta parcela já está paga')
+  }
+
+  const today = new Date().toISOString().split('T')[0]
+  const { error } = await supabase
+    .from('financial_installment_schedules')
+    .update({ is_paid: true, paid_date: today })
+    .eq('id', target.id)
+
+  throwIfError(error, 'confirmar parcela')
+  await syncParentFromSchedules(transactionId)
 }
 
 export interface FinancialSettings {

@@ -302,6 +302,8 @@ export interface Database {
           document_number: string | null
           installment_number: number | null
           installment_total: number | null
+          is_installment_plan: boolean
+          plan_total_amount: number | null
           cash_destination: string
           created_at: string
           updated_at: string

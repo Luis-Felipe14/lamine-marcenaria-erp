@@ -343,19 +343,30 @@ export function FinancialTransactionForm({
             <Input
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
-              placeholder={form.type === 'receita' ? 'Ex.: Sinal do projeto cozinha' : 'Ex.: Conta de energia março'}
+              placeholder={
+                form.category === 'maquinario'
+                  ? 'Ex.: Serra esquadrejadeira'
+                  : form.type === 'receita'
+                    ? 'Ex.: Sinal do projeto cozinha'
+                    : 'Ex.: Conta de energia março'
+              }
             />
           </div>
         )}
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <Label>Valor *</Label>
+            <Label>{fields.amount.label ?? 'Valor'} *</Label>
             <CurrencyInput value={form.amount} onChange={(amount) => setForm({ ...form, amount })} />
             {fields.employee_id.visible && (
               <FieldHint text="Preenchido com o salário cadastrado — altere se houver bonificação ou desconto" />
             )}
             {sinalRemainingHint && <FieldHint text={sinalRemainingHint} />}
+            {form.type === 'despesa' && form.category === 'maquinario' && form.amount > 0 && Number(form.installment_total) >= 2 && (
+              <FieldHint
+                text={`${form.installment_total}x de ${formatCurrency(Math.floor((form.amount * 100) / Number(form.installment_total)) / 100)} (última parcela ajusta centavos)`}
+              />
+            )}
           </div>
           {fields.due_date.visible && (
             <div>
@@ -372,6 +383,26 @@ export function FinancialTransactionForm({
             </div>
           )}
         </div>
+
+        {fields.installment_total.visible && fields.installment_total.section === 'core' && (
+          <div>
+            <Label>
+              {fields.installment_total.label}
+              {fields.installment_total.required && ' *'}
+            </Label>
+            <Input
+              type="number"
+              min={2}
+              placeholder="Ex.: 12"
+              value={form.installment_total}
+              onChange={(e) => setForm({
+                ...form,
+                installment_total: e.target.value === '' ? '' : Number(e.target.value),
+              })}
+            />
+            <FieldHint text={fields.installment_total.hint} />
+          </div>
+        )}
 
         {fields.cash_destination.visible && (
           <div>
@@ -437,7 +468,7 @@ export function FinancialTransactionForm({
               </div>
             )}
 
-            {(fields.installment_number.visible || fields.installment_total.visible) && (
+            {(fields.installment_number.visible || (fields.installment_total.visible && fields.installment_total.section === 'payment')) && (
               <div className={fields.installment_number.visible && fields.installment_total.visible ? 'grid grid-cols-2 gap-4' : undefined}>
                 {fields.installment_number.visible && (
                   <div>
@@ -457,7 +488,7 @@ export function FinancialTransactionForm({
                     />
                   </div>
                 )}
-                {fields.installment_total.visible && (
+                {fields.installment_total.visible && fields.installment_total.section === 'payment' && (
                   <div>
                     <Label>
                       {fields.installment_total.label}

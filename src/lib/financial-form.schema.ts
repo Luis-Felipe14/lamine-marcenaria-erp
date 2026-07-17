@@ -104,6 +104,37 @@ function categoryRules(type: FinancialFormType, category: string): Partial<Recor
       return {
         employee_id: { visible: true, required: true, label: 'Colaborador', section: 'core', hint: 'Selecione o funcionário — o valor do salário será preenchido automaticamente' },
       }
+    case 'maquinario':
+      return {
+        supplier_id: { visible: true, required: false, label: 'Fornecedor', section: 'link' },
+        installment_total: {
+          visible: true,
+          required: true,
+          label: 'Quantidade de parcelas',
+          section: 'core',
+          hint: 'Gera o cronograma interno (mesmo valor todo mês)',
+        },
+        amount: {
+          visible: true,
+          required: true,
+          label: 'Valor total da máquina',
+          section: 'core',
+        },
+        due_date: {
+          visible: true,
+          required: true,
+          label: '1º vencimento',
+          section: 'core',
+          hint: 'Dia base — as demais parcelas repetem o dia nos meses seguintes',
+        },
+        document_number: {
+          visible: true,
+          required: false,
+          label: 'Nº documento / NF',
+          section: 'payment',
+          hint: 'Opcional — nota fiscal ou contrato',
+        },
+      }
     case 'contas_fixas':
       return {
         supplier_id: { visible: true, required: false, label: 'Fornecedor / concessionária', section: 'link' },
@@ -208,6 +239,10 @@ export function getFinancialFormFields(
     if (form.category === 'salario') {
       fields.description = { ...fields.description, visible: false, required: false }
     }
+    if (form.category === 'maquinario') {
+      // Parcelas do cartão (installment_number/total de pagamento) não se aplicam ao plano
+      fields.installment_number = { ...fields.installment_number, visible: false, required: false }
+    }
   } else {
     fields.supplier_id = { ...fields.supplier_id, visible: false }
     fields.purchase_id = { ...fields.purchase_id, visible: false }
@@ -225,6 +260,25 @@ export function getFinancialFormFields(
     for (const [key, rule] of Object.entries(paymentMethodRules(form.payment_method)) as [FinancialFieldKey, FinancialFieldRule][]) {
       const merged = { ...fields[key], ...rule, visible: rule.visible ?? true }
       fields[key] = merged
+    }
+  }
+
+  if (form.type === 'despesa' && form.category === 'maquinario') {
+    fields.installment_number = { ...fields.installment_number, visible: false, required: false }
+    fields.installment_total = {
+      visible: true,
+      required: true,
+      label: 'Quantidade de parcelas',
+      section: 'core',
+      hint: 'Gera o cronograma interno (mesmo valor todo mês)',
+    }
+    fields.amount = { ...fields.amount, label: 'Valor total da máquina', required: true }
+    fields.due_date = {
+      ...fields.due_date,
+      visible: true,
+      required: true,
+      label: '1º vencimento',
+      hint: 'Dia base — as demais parcelas repetem o dia nos meses seguintes',
     }
   }
 
@@ -324,6 +378,14 @@ export function validateFinancialForm(
   if (fields.installment_total.visible && instTotal !== null && instTotal < 1) {
     return 'Total de parcelas inválido'
   }
+  if (form.type === 'despesa' && form.category === 'maquinario') {
+    if (!instTotal || instTotal < 2) {
+      return 'Maquinário parcelado exige ao menos 2 parcelas'
+    }
+    if (!form.due_date) {
+      return 'Informe a data do primeiro vencimento'
+    }
+  }
 
   return null
 }
@@ -336,6 +398,11 @@ export function sanitizeFinancialPayload(
   const description = fields.employee_id.visible && employeeName
     ? employeeName.trim()
     : form.description.trim()
+
+  const isMaquinarioPlan = form.type === 'despesa' && form.category === 'maquinario'
+  const installmentTotal = fields.installment_total.visible && form.installment_total !== ''
+    ? Number(form.installment_total)
+    : null
 
   return {
     type: form.type,
@@ -352,10 +419,14 @@ export function sanitizeFinancialPayload(
     employee_id: fields.employee_id.visible && form.employee_id ? form.employee_id : null,
     document_number: fields.document_number.visible ? (form.document_number.trim() || null) : null,
     installment_number: null,
-    installment_total: fields.installment_total.visible && form.installment_total !== ''
-      ? Number(form.installment_total)
-      : null,
+    installment_total: isMaquinarioPlan ? installmentTotal : (
+      fields.installment_total.visible && form.installment_total !== ''
+        ? Number(form.installment_total)
+        : null
+    ),
     cash_destination: form.type === 'receita' ? form.cash_destination : 'empresa',
+    is_installment_plan: isMaquinarioPlan,
+    plan_total_amount: isMaquinarioPlan ? (Number(form.amount) || 0) : null,
   }
 }
 
