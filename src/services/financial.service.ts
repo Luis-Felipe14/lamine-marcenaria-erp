@@ -118,15 +118,20 @@ export async function createInstallmentPlanTransaction(
       installment_total: count,
       installment_number: null,
     })
-    .select(TRANSACTION_SELECT)
+    .select('id')
     .single()
 
   throwIfError(error, 'lançamento parcelado')
+  if (!created?.id) {
+    throw new Error('Falha ao criar lançamento parcelado')
+  }
+
+  const transactionId = created.id
 
   const { error: scheduleError } = await supabase
     .from('financial_installment_schedules')
     .insert(schedule.map((row) => ({
-      transaction_id: created.id,
+      transaction_id: transactionId,
       installment_number: row.installment_number,
       amount: row.amount,
       due_date: row.due_date,
@@ -134,11 +139,22 @@ export async function createInstallmentPlanTransaction(
     })))
 
   if (scheduleError) {
-    await supabase.from('financial_transactions').delete().eq('id', created.id)
+    await supabase.from('financial_transactions').delete().eq('id', transactionId)
     throwIfError(scheduleError, 'cronograma de parcelas')
   }
 
-  return created as FinancialTransaction
+  const { data: full, error: loadError } = await supabase
+    .from('financial_transactions')
+    .select(TRANSACTION_SELECT)
+    .eq('id', transactionId)
+    .single()
+
+  throwIfError(loadError, 'lançamento parcelado')
+  if (!full) {
+    throw new Error('Falha ao carregar lançamento parcelado')
+  }
+
+  return full as unknown as FinancialTransaction
 }
 
 async function syncParentFromSchedules(transactionId: string): Promise<void> {
