@@ -45,7 +45,7 @@ import { listInternalRequestsPaginated } from '@/services/requests.service'
 import { listMaterialsPaginated, type MaterialsListFilters } from '@/services/inventory-list.service'
 import { listLowStockMaterials } from '@/services/inventory.service'
 import { fetchPayrollMonthData } from '@/services/payroll.service'
-import { listBudgetsPaginated } from '@/services/budgets.service'
+import { listBudgetsPaginated, getBudgetProposalDefaults } from '@/services/budgets.service'
 import type { Database } from '@/types/database'
 
 type Client = Database['public']['Tables']['clients']['Row']
@@ -361,5 +361,13 @@ export function useBudgets(page: number) {
     queryFn: () => listBudgetsPaginated(page),
     placeholderData: keepPreviousData,
     staleTime: 30_000,
+  })
+}
+
+export function useBudgetProposalDefaults() {
+  return useQuery({
+    queryKey: queryKeys.budgetProposalDefaults,
+    queryFn: getBudgetProposalDefaults,
+    staleTime: 60_000,
   })
 }

@@ -26,10 +26,7 @@ import {
   validateBudgetEnvironmentImage,
 } from '@/services/budget-environment-images.service'
 import {
-  DEFAULT_COMMERCIAL_TERMS,
   DEFAULT_ENTRADA_PERCENT,
-  DEFAULT_INSTALLATION_TIMELINE,
-  DEFAULT_MANUFACTURING_TIMELINE,
 } from '@/pdf/defaults'
 import type { BudgetProposalDetailMode } from '@/pdf/types'
 import {
@@ -40,8 +37,15 @@ import {
   type BudgetEntradaMode,
 } from '@/lib/budget-entrada'
 import { useConfirm } from '@/hooks/useConfirm'
-import { useBudgets, useLookupClients } from '@/hooks/useQueries'
-import type { Budget } from '@/services/budgets.service'
+import { useBudgets, useBudgetProposalDefaults, useLookupClients } from '@/hooks/useQueries'
+import {
+  getBudgetProposalDefaults,
+  saveBudgetProposalDefaults,
+  type Budget,
+  type BudgetProposalDefaults,
+  FALLBACK_BUDGET_PROPOSAL_DEFAULTS,
+} from '@/services/budgets.service'
+import { queryKeys } from '@/lib/query-keys'
 
 interface BudgetItemForm {
   description: string
@@ -83,19 +87,21 @@ const emptyEnvironment = (name = 'Sala'): BudgetEnvironmentForm => ({
   subtotal: 0,
 })
 
-const emptyForm = () => ({
+const emptyForm = (defaults?: Partial<BudgetProposalDefaults>) => ({
   client_id: '',
   project_name: '',
   measurements: '',
   discount: 0,
   notes: '',
-  commercial_terms: DEFAULT_COMMERCIAL_TERMS,
+  commercial_terms: defaults?.commercial_terms?.trim() || FALLBACK_BUDGET_PROPOSAL_DEFAULTS.commercial_terms,
   entrada_mode: 'percent' as BudgetEntradaMode,
   entrada_percent: DEFAULT_ENTRADA_PERCENT,
   entrada_percent_text: String(DEFAULT_ENTRADA_PERCENT),
   entrada_value: 0,
-  manufacturing_timeline: DEFAULT_MANUFACTURING_TIMELINE,
-  installation_timeline: DEFAULT_INSTALLATION_TIMELINE,
+  manufacturing_timeline:
+    defaults?.manufacturing_timeline?.trim() || FALLBACK_BUDGET_PROPOSAL_DEFAULTS.manufacturing_timeline,
+  installation_timeline:
+    defaults?.installation_timeline?.trim() || FALLBACK_BUDGET_PROPOSAL_DEFAULTS.installation_timeline,
   proposal_detail_mode: 'items' as BudgetProposalDetailMode,
   environments: [emptyEnvironment()],
 })
@@ -132,11 +138,12 @@ export function BudgetsPage() {
   const budgets = listResult?.data ?? []
   const totalPages = listResult?.totalPages ?? 1
   const { data: clients = [] } = useLookupClients()
+  const { data: proposalDefaults = FALLBACK_BUDGET_PROPOSAL_DEFAULTS } = useBudgetProposalDefaults()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<Budget | null>(null)
   const [formLoading, setFormLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [form, setForm] = useState(emptyForm)
+  const [form, setForm] = useState(() => emptyForm())
   const [pdfDialogOpen, setPdfDialogOpen] = useState(false)
   const [pdfBudget, setPdfBudget] = useState<Budget | null>(null)
   const [pdfExporting, setPdfExporting] = useState(false)
@@ -145,14 +152,25 @@ export function BudgetsPage() {
     void queryClient.invalidateQueries({ queryKey: ['budgets'] })
   }, [queryClient])
 
+  const applyNewBudgetForm = useCallback(async () => {
+    setEditing(null)
+    try {
+      const defaults = await queryClient.fetchQuery({
+        queryKey: queryKeys.budgetProposalDefaults,
+        queryFn: getBudgetProposalDefaults,
+      })
+      setForm(emptyForm(defaults))
+    } catch {
+      setForm(emptyForm(proposalDefaults))
+    }
+  }, [queryClient, proposalDefaults])
+
   useEffect(() => {
-    const leadId = searchParams.get('lead')
-    if (leadId) {
-      setEditing(null)
-      setForm(emptyForm())
+    if (searchParams.get('lead')) {
+      void applyNewBudgetForm()
       setDialogOpen(true)
     }
-  }, [searchParams])
+  }, [searchParams, applyNewBudgetForm])
 
   const calculateTotal = () => projectSellingTotal(form.environments) - form.discount
 
@@ -164,9 +182,8 @@ export function BudgetsPage() {
   )
 
   const openCreate = () => {
-    setEditing(null)
-    setForm(emptyForm())
     setDialogOpen(true)
+    void applyNewBudgetForm()
   }
 
   const openEdit = async (budget: Budget) => {
@@ -261,13 +278,13 @@ export function BudgetsPage() {
         measurements: row.measurements ?? '',
         discount: row.discount ?? 0,
         notes: row.notes ?? '',
-        commercial_terms: row.commercial_terms?.trim() || DEFAULT_COMMERCIAL_TERMS,
+        commercial_terms: row.commercial_terms?.trim() || proposalDefaults.commercial_terms,
         entrada_mode: parseBudgetEntradaMode(row.entrada_mode),
         entrada_percent: entradaPercent,
         entrada_percent_text: String(entradaPercent).replace('.', ','),
         entrada_value: Number(row.entrada_value ?? 0),
-        manufacturing_timeline: row.manufacturing_timeline?.trim() || DEFAULT_MANUFACTURING_TIMELINE,
-        installation_timeline: row.installation_timeline?.trim() || DEFAULT_INSTALLATION_TIMELINE,
+        manufacturing_timeline: row.manufacturing_timeline?.trim() || proposalDefaults.manufacturing_timeline,
+        installation_timeline: row.installation_timeline?.trim() || proposalDefaults.installation_timeline,
         proposal_detail_mode: parseDetailMode(row.proposal_detail_mode),
         environments: environmentForms.length > 0 ? environmentForms : [emptyEnvironment()],
       })
@@ -431,6 +448,14 @@ export function BudgetsPage() {
         await saveBudgetEnvironments((budget as { id: string }).id)
         toast.success('Orçamento criado!')
       }
+
+      await saveBudgetProposalDefaults({
+        commercial_terms: form.commercial_terms,
+        manufacturing_timeline: form.manufacturing_timeline,
+        installation_timeline: form.installation_timeline,
+      })
+      await queryClient.invalidateQueries({ queryKey: queryKeys.budgetProposalDefaults })
+
       setDialogOpen(false)
       setEditing(null)
       refreshBudgets()

@@ -43,4 +43,5 @@ export const queryKeys = {
   employeesPaginated: (page: number) => ['employees', 'paginated', page] as const,
   payrollMonth: (month: string) => ['payroll', 'month', month] as const,
   budgetsPaginated: (page: number) => ['budgets', 'paginated', page] as const,
+  budgetProposalDefaults: ['budgets', 'proposal-defaults'] as const,
 }
