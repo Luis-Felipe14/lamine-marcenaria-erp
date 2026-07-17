@@ -10,8 +10,10 @@ import { useViewport } from '@/hooks/useViewport'
 import { useUIStore } from '@/stores/uiStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useAuth } from '@/hooks/useAuth'
-import { hasPermission, canAccessDashboard, canAccessReports } from '@/lib/permissions'
-import { useSidebarBadgesQuery } from '@/hooks/useQueries'
+import { hasPermission } from '@/lib/permissions'
+import { hasModuleAccess } from '@/lib/secretary-access'
+import { useSecretaryAccessSettings, useSidebarBadgesQuery } from '@/hooks/useQueries'
+import { DEFAULT_SECRETARY_ACCESS, type SecretaryAccessSettings } from '@/services/secretary-access.service'
 import type { UserRole } from '@/types'
 import type { LucideIcon } from 'lucide-react'
 
@@ -80,17 +82,28 @@ const systemNavGroup: NavGroup = {
   ],
 }
 
-function isItemVisible(item: NavItem, role: UserRole | undefined): boolean {
-  if (item.to === '/') return canAccessDashboard(role)
-  if (item.to === '/relatorios') return canAccessReports(role)
-  return hasPermission(role, item.permission)
+function isItemVisible(
+  item: NavItem,
+  role: UserRole | undefined,
+  settings: SecretaryAccessSettings,
+): boolean {
+  if (item.to === '/configuracoes') {
+    return hasPermission(role, item.permission) || hasPermission(role, '*')
+  }
+  if (item.to === '/') return hasModuleAccess(role, 'dashboard.read', settings)
+  if (item.to === '/relatorios') return hasModuleAccess(role, 'reports.read', settings)
+  return hasModuleAccess(role, item.permission, settings)
 }
 
-function filterVisibleGroups(groups: NavGroup[], role: UserRole | undefined) {
+function filterVisibleGroups(
+  groups: NavGroup[],
+  role: UserRole | undefined,
+  settings: SecretaryAccessSettings,
+) {
   return groups
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => isItemVisible(item, role)),
+      items: group.items.filter((item) => isItemVisible(item, role, settings)),
     }))
     .filter((group) => group.items.length > 0)
 }
@@ -149,16 +162,18 @@ export function Sidebar() {
   const role = useAuthStore((s) => s.profile?.role?.name) as UserRole | undefined
   const { signOut } = useAuth()
   const { data: badges = {} } = useSidebarBadgesQuery()
+  const { data: secretaryAccess } = useSecretaryAccessSettings()
+  const accessSettings = secretaryAccess ?? DEFAULT_SECRETARY_ACCESS
 
   const collapsed = usesDrawerNav ? false : sidebarCollapsed
   const closeMobileNav = () => {
     if (usesDrawerNav) setMobileNavOpen(false)
   }
 
-  const visibleMainGroups = filterVisibleGroups(mainNavGroups, role)
+  const visibleMainGroups = filterVisibleGroups(mainNavGroups, role, accessSettings)
   const visibleSystemGroup = {
     ...systemNavGroup,
-    items: systemNavGroup.items.filter((item) => isItemVisible(item, role)),
+    items: systemNavGroup.items.filter((item) => isItemVisible(item, role, accessSettings)),
   }
 
   return (

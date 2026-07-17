@@ -5,6 +5,7 @@ interface EnvironmentBlockProps {
   environment: BudgetProposalEnvironment
   /** Quando false, omite valores individuais dos móveis (só totais por ambiente). */
   showItemPrices?: boolean
+  monogramUrl?: string
 }
 
 function EnvironmentPlaceholder() {
@@ -18,7 +19,11 @@ function EnvironmentPlaceholder() {
   )
 }
 
-export function EnvironmentBlock({ environment, showItemPrices = true }: EnvironmentBlockProps) {
+export function EnvironmentBlock({
+  environment,
+  showItemPrices = true,
+  monogramUrl,
+}: EnvironmentBlockProps) {
   const items = environment.items
     .map((item) => ({
       description: item.description.trim(),
@@ -39,12 +44,16 @@ export function EnvironmentBlock({ environment, showItemPrices = true }: Environ
       <div className="proposal-env__content">
         <div className="proposal-env__title-row">
           <span className="proposal-env__icon" aria-hidden>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-              <rect x="3" y="3" width="8" height="8" rx="1" stroke="currentColor" strokeWidth="1.4" />
-              <rect x="13" y="3" width="8" height="8" rx="1" stroke="currentColor" strokeWidth="1.4" />
-              <rect x="3" y="13" width="8" height="8" rx="1" stroke="currentColor" strokeWidth="1.4" />
-              <rect x="13" y="13" width="8" height="8" rx="1" stroke="currentColor" strokeWidth="1.4" />
-            </svg>
+            {monogramUrl ? (
+              <img src={monogramUrl} alt="" className="proposal-env__monogram" />
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <rect x="3" y="3" width="8" height="8" rx="1" stroke="currentColor" strokeWidth="1.4" />
+                <rect x="13" y="3" width="8" height="8" rx="1" stroke="currentColor" strokeWidth="1.4" />
+                <rect x="3" y="13" width="8" height="8" rx="1" stroke="currentColor" strokeWidth="1.4" />
+                <rect x="13" y="13" width="8" height="8" rx="1" stroke="currentColor" strokeWidth="1.4" />
+              </svg>
+            )}
           </span>
           <h3 className="proposal-env__name">{environment.name}</h3>
         </div>

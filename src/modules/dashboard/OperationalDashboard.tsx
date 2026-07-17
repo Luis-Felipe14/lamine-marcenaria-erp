@@ -4,14 +4,17 @@ import { DashboardZone, PageSplitZone } from '@/components/shared/PageLayout'
 import { StatCard, StatCardSkeleton, StatGrid } from '@/components/shared/StatCard'
 import { Widget } from '@/components/shared/Widget'
 import { useOperationalMetrics } from '@/hooks/useQueries'
-import { hasPermission } from '@/lib/permissions'
 import { formatCurrency } from '@/lib/utils'
+import { formatCurrencyMasked, hasModuleAccess } from '@/lib/secretary-access'
 import { useAuthStore } from '@/stores/authStore'
+import { useSecretaryAccess } from '@/hooks/useSecretaryAccess'
 
 export function OperationalDashboard() {
   const { data, isLoading } = useOperationalMetrics()
   const role = useAuthStore((s) => s.profile?.role?.name)
-  const canSeeLumberCredit = hasPermission(role, 'lumber_credit.read')
+  const { settings, canViewAmounts } = useSecretaryAccess()
+  const canSeeLumberCredit = hasModuleAccess(role, 'lumber_credit.read', settings)
+  const money = (value: number) => formatCurrencyMasked(value, canViewAmounts, formatCurrency)
 
   return (
     <div className="space-y-4 md:space-y-6">
@@ -40,7 +43,7 @@ export function OperationalDashboard() {
                 <StatCard
                   compact
                   title="Créd. Madereira"
-                  value={formatCurrency(data.lumberCreditBalance)}
+                  value={money(data.lumberCreditBalance)}
                   icon={CreditCard}
                   highlight={data.lumberCreditBalance > 0}
                   subtitle="Saldo disponível na madereira"
@@ -71,7 +74,7 @@ export function OperationalDashboard() {
                 {canSeeLumberCredit && (
                   <div className="summary-list-row">
                     <span className="text-sm text-gray-500">Crédito madereira</span>
-                    <span className="font-semibold tabular-nums text-gold">{formatCurrency(data.lumberCreditBalance)}</span>
+                    <span className="font-semibold tabular-nums text-gold">{money(data.lumberCreditBalance)}</span>
                   </div>
                 )}
               </div>

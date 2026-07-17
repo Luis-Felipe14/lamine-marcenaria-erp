@@ -8,6 +8,8 @@ export interface BudgetProposalCompany {
   email?: string
   address?: string
   logoUrl: string
+  /** Símbolo compacto (monograma) — ícone dos ambientes no PDF */
+  monogramUrl: string
   headerImageUrl?: string
 }
 

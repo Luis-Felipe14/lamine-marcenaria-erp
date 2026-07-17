@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { APP_LOGO, APP_BACKGROUND } from '@/lib/branding'
+import { APP_LOGO, APP_MONOGRAM, APP_BACKGROUND } from '@/lib/branding'
 import { APP_NAME, APP_SUBTITLE } from '@/lib/constants'
 import { DEFAULT_COMPANY, type CompanyInfo } from '@/lib/export-brand'
 import {
@@ -154,6 +154,7 @@ export async function loadBudgetProposalData(
       email: company.email,
       address: company.address,
       logoUrl: resolveAbsoluteUrl(APP_LOGO.primary, baseUrl),
+      monogramUrl: resolveAbsoluteUrl(APP_MONOGRAM.primary, baseUrl),
       headerImageUrl: resolveAbsoluteUrl(APP_BACKGROUND.optionalPhoto, baseUrl),
     },
     budget: {

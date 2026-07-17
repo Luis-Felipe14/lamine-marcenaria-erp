@@ -6,6 +6,7 @@ import { startOfMonth, endOfMonth, format, subMonths } from 'date-fns'
 import { getInvestmentStats } from '@/services/marketing.service'
 import { getLumberCreditBalance } from '@/services/lumberyard-credit.service'
 import { getArchitectRankings } from '@/services/architects.service'
+import { getFinancialSummary } from '@/services/financial.service'
 
 const ACTIVE_ORDER_STATUSES = ['projeto_desenvolvimento', 'aguardando_material', 'em_producao', 'pronto_entrega', 'em_montagem']
 
@@ -53,11 +54,9 @@ async function sumFinancialAmount(
   })
 
   if (error) {
-    if (error.code === 'PGRST202') {
-      return sumFinancialAmountFallback(type, isPaid, dateFrom, dateTo, dueDateTo, cashDestination)
-    }
+    // Assinatura antiga ou RPC indisponível — tenta query direta
     console.warn('[Dashboard] sumFinancialAmount:', error.message)
-    return 0
+    return sumFinancialAmountFallback(type, isPaid, dateFrom, dateTo, dueDateTo, cashDestination)
   }
 
   return Number(data) || 0
@@ -332,21 +331,20 @@ export interface GlobalHeaderMetrics {
 }
 
 export async function getGlobalHeaderMetrics(): Promise<GlobalHeaderMetrics> {
-  const now = new Date()
-  const monthStart = format(startOfMonth(now), 'yyyy-MM-dd')
-  const monthEnd = format(endOfMonth(now), 'yyyy-MM-dd')
-
-  const [revenues, activeOrders, receivable, criticalStock] = await Promise.all([
-    sumFinancialAmount('receita', true, monthStart, monthEnd, undefined, 'empresa'),
+  // Receita / A receber: mesmos totais do resumo do Financeiro (não só o mês corrente)
+  const [summary, activeOrders, criticalStock] = await Promise.all([
+    getFinancialSummary().catch((err) => {
+      console.warn('[Dashboard] getFinancialSummary no header:', err)
+      return { receitas: 0, despesas: 0, aPagar: 0, aReceber: 0 }
+    }),
     countQuery('orders', (q) => q.in('status', ACTIVE_ORDER_STATUSES).is('deleted_at', null), true),
-    sumFinancialAmount('receita', false),
     countCriticalStock(),
   ])
 
   return {
-    monthlyRevenue: revenues,
+    monthlyRevenue: summary.receitas,
     activeOrders,
-    accountsReceivable: receivable,
+    accountsReceivable: summary.aReceber,
     criticalStock: typeof criticalStock === 'number' ? criticalStock : 0,
   }
 }

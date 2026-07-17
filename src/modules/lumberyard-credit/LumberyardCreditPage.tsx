@@ -29,8 +29,10 @@ import {
 } from '@/lib/constants'
 import { hasPermission } from '@/lib/permissions'
 import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatCurrencyMasked } from '@/lib/secretary-access'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { useConfirm } from '@/hooks/useConfirm'
+import { useSecretaryAccess } from '@/hooks/useSecretaryAccess'
 import {
   useLookupClients,
   useLookupMaterials,
@@ -75,6 +77,8 @@ export function LumberyardCreditPage() {
   const userId = useAuthStore((s) => s.user?.id)
   const role = useAuthStore((s) => s.profile?.role?.name) as UserRole | undefined
   const canWrite = hasPermission(role, 'lumber_credit.*')
+  const { canViewAmounts } = useSecretaryAccess()
+  const money = (value: number) => formatCurrencyMasked(value, canViewAmounts, formatCurrency)
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<LumberCreditMovement | null>(null)
@@ -197,7 +201,7 @@ export function LumberyardCreditPage() {
       !editing &&
       submitAmount > availableBalance &&
       !window.confirm(
-        `O valor (${formatCurrency(submitAmount)}) excede o saldo disponível (${formatCurrency(availableBalance)}). Deseja registrar mesmo assim?`
+        `O valor (${money(submitAmount)}) excede o saldo disponível (${money(availableBalance)}). Deseja registrar mesmo assim?`
       )
     ) {
       return
@@ -280,7 +284,7 @@ export function LumberyardCreditPage() {
           <ul className="list-inside list-disc text-xs text-gray-400">
             {lines.map((line) => (
               <li key={line.material_id}>
-                {line.name} — {line.quantity} {line.unit} ({formatCurrency(line.amount)})
+                {line.name} — {line.quantity} {line.unit} ({money(line.amount)})
               </li>
             ))}
           </ul>
@@ -311,12 +315,18 @@ export function LumberyardCreditPage() {
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard title="Total passado (cartão)" value={formatCurrency(stats.totalEntrada)} icon={CreditCard} highlight subtitle={statsSubtitle} />
-        <StatCard title="Total utilizado" value={formatCurrency(stats.totalSaida)} icon={TrendingDown} subtitle={statsSubtitle} />
-        <StatCard title="Saldo disponível" value={formatCurrency(stats.balance)} icon={Wallet} highlight={stats.balance > 0} subtitle={statsSubtitle} />
+        <StatCard title="Total passado (cartão)" value={money(stats.totalEntrada)} icon={CreditCard} highlight subtitle={statsSubtitle} />
+        <StatCard title="Total utilizado" value={money(stats.totalSaida)} icon={TrendingDown} subtitle={statsSubtitle} />
+        <StatCard title="Saldo disponível" value={money(stats.balance)} icon={Wallet} highlight={stats.balance > 0} subtitle={statsSubtitle} />
         <StatCard
           title="Utilização"
-          value={stats.totalEntrada > 0 ? `${((stats.totalSaida / stats.totalEntrada) * 100).toFixed(0)}%` : '0%'}
+          value={
+            canViewAmounts
+              ? stats.totalEntrada > 0
+                ? `${((stats.totalSaida / stats.totalEntrada) * 100).toFixed(0)}%`
+                : '0%'
+              : '•••'
+          }
           icon={TrendingUp}
           subtitle={filterClient ? statsSubtitle : 'Do crédito já utilizado'}
         />
@@ -352,9 +362,9 @@ export function LumberyardCreditPage() {
                   {clientBalances.map((row) => (
                     <tr key={row.client_id} className="border-b border-white/5">
                       <td className="px-2 py-2 font-medium">{row.client_name}</td>
-                      <td className="px-2 py-2 text-right text-green-400">{formatCurrency(row.total_entrada)}</td>
-                      <td className="px-2 py-2 text-right text-red-400">{formatCurrency(row.total_saida)}</td>
-                      <td className="px-2 py-2 text-right font-semibold text-gold">{formatCurrency(row.balance)}</td>
+                      <td className="px-2 py-2 text-right text-green-400">{money(row.total_entrada)}</td>
+                      <td className="px-2 py-2 text-right text-red-400">{money(row.total_saida)}</td>
+                      <td className="px-2 py-2 text-right font-semibold text-gold">{money(row.balance)}</td>
                       {canWrite ? (
                         <td className="px-2 py-2 text-right">
                           <div className="flex justify-end gap-1">
@@ -465,14 +475,14 @@ export function LumberyardCreditPage() {
                 header: 'Valor',
                 render: (r) => (
                   <span className={r.movement_type === 'entrada' ? 'text-green-400' : 'text-red-400'}>
-                    {r.movement_type === 'entrada' ? '+' : '−'}{formatCurrency(r.amount)}
+                    {r.movement_type === 'entrada' ? '+' : '−'}{money(r.amount)}
                   </span>
                 ),
               },
               {
                 key: 'balance',
                 header: filterClient ? 'Saldo do cliente' : 'Saldo após',
-                render: (r) => <span className="font-medium text-gold">{formatCurrency(r.balanceAfter)}</span>,
+                render: (r) => <span className="font-medium text-gold">{money(r.balanceAfter)}</span>,
               },
               { key: 'nf', header: 'NF', render: (r) => r.invoice_number || '—' },
               {

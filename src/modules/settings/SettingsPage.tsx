@@ -21,6 +21,7 @@ import { ROLES, ROLE_DESCRIPTIONS, EMPLOYEE_DEPARTMENTS, LEAD_STATUSES, ORDER_ST
 import { displayUsername, isInternalAuthEmail } from '@/lib/auth-username'
 import { deleteSystemUser, resetUserPassword } from '@/services/users.service'
 import { canManageUsers, canManageSettings } from '@/lib/permissions'
+import { queryKeys } from '@/lib/query-keys'
 import { isSystemAdminProfile, filterHiddenSystemAdmins } from '@/lib/system-admin'
 import { SystemAdminSection } from '@/components/settings/SystemAdminSection'
 import {
@@ -31,7 +32,14 @@ import {
 } from '@/services/material-categories.service'
 import { useMaterialCategories, useInvalidateMaterialCategories } from '@/hooks/useMaterialCategories'
 import { saveLumberCreditSettings } from '@/services/lumberyard-credit.service'
-import { saveFinancialSettings } from '@/services/financial.service'
+import {
+  DEFAULT_SECRETARY_ACCESS,
+  SECRETARY_MODULE_KEYS,
+  SECRETARY_MODULE_LABELS,
+  saveSecretaryAccessSettings,
+  type SecretaryAccessSettings,
+  type SecretaryModuleKey,
+} from '@/services/secretary-access.service'
 import { useAuthStore } from '@/stores/authStore'
 import { useConfirm } from '@/hooks/useConfirm'
 import type { UserRole } from '@/types'
@@ -79,7 +87,7 @@ export function SettingsPage() {
   const [monthlyGoal, setMonthlyGoal] = useState(50000)
   const [goalEnabled, setGoalEnabled] = useState(false)
   const [allowCrossClientCredit, setAllowCrossClientCredit] = useState(false)
-  const [secretaryCanViewSummary, setSecretaryCanViewSummary] = useState(false)
+  const [secretaryAccess, setSecretaryAccess] = useState<SecretaryAccessSettings>(DEFAULT_SECRETARY_ACCESS)
   const [loading, setLoading] = useState(true)
   const [savingUserId, setSavingUserId] = useState<string | null>(null)
   const [passwordDrafts, setPasswordDrafts] = useState<Record<string, string>>({})
@@ -126,11 +134,11 @@ export function SettingsPage() {
 
   useEffect(() => {
     async function load() {
-      const [{ data: settings }, { data: goals }, { data: lumberCredit }, { data: financial }] = await Promise.all([
+      const [{ data: settings }, { data: goals }, { data: lumberCredit }, { data: secretary }] = await Promise.all([
         supabase.from('settings').select('*').eq('key', 'company').single(),
         supabase.from('settings').select('*').eq('key', 'goals').maybeSingle(),
         supabase.from('settings').select('*').eq('key', 'lumber_credit').maybeSingle(),
-        supabase.from('settings').select('*').eq('key', 'financial').maybeSingle(),
+        supabase.from('settings').select('*').eq('key', 'secretary_access').maybeSingle(),
       ])
       if (settings?.value) setCompany(settings.value as CompanySettings)
       const goalsVal = goals?.value as {
@@ -143,8 +151,17 @@ export function SettingsPage() {
       const lumberVal = lumberCredit?.value as { allow_cross_client?: boolean } | undefined
       setAllowCrossClientCredit(lumberVal?.allow_cross_client ?? false)
 
-      const financialVal = financial?.value as { secretary_can_view_summary?: boolean } | undefined
-      setSecretaryCanViewSummary(financialVal?.secretary_can_view_summary ?? false)
+      const secretaryVal = secretary?.value as Partial<SecretaryAccessSettings> | undefined
+      let canViewAmounts = secretaryVal?.can_view_amounts
+      if (typeof canViewAmounts !== 'boolean') {
+        const { data: financial } = await supabase.from('settings').select('value').eq('key', 'financial').maybeSingle()
+        const financialVal = financial?.value as { secretary_can_view_summary?: boolean } | undefined
+        canViewAmounts = financialVal?.secretary_can_view_summary ?? false
+      }
+      setSecretaryAccess({
+        modules: { ...DEFAULT_SECRETARY_ACCESS.modules, ...secretaryVal?.modules },
+        can_view_amounts: canViewAmounts ?? false,
+      })
 
       await loadUsers()
       setLoading(false)
@@ -181,14 +198,21 @@ export function SettingsPage() {
     }
   }
 
-  const saveFinancial = async () => {
+  const saveSecretaryAccess = async () => {
     try {
-      await saveFinancialSettings({ secretary_can_view_summary: secretaryCanViewSummary })
-      await queryClient.invalidateQueries({ queryKey: ['financial'] })
-      toast.success('Configurações financeiras salvas!')
+      await saveSecretaryAccessSettings(secretaryAccess)
+      await queryClient.invalidateQueries({ queryKey: queryKeys.secretaryAccess })
+      toast.success('Acesso da secretária atualizado!')
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erro ao salvar configurações')
+      toast.error(e instanceof Error ? e.message : 'Erro ao salvar acesso da secretária')
     }
+  }
+
+  const setSecretaryModule = (key: SecretaryModuleKey, enabled: boolean) => {
+    setSecretaryAccess((prev) => ({
+      ...prev,
+      modules: { ...prev.modules, [key]: enabled },
+    }))
   }
 
   const updateUserRole = async (userId: string, roleId: string) => {
@@ -340,7 +364,7 @@ export function SettingsPage() {
         <TabsList className="mb-6">
           <TabsTrigger value="company">Empresa</TabsTrigger>
           <TabsTrigger value="goals">Metas</TabsTrigger>
-          {canEditCategories && <TabsTrigger value="financial">Financeiro</TabsTrigger>}
+          {canEditCategories && <TabsTrigger value="secretary-access">Acesso secretária</TabsTrigger>}
           {canEditCategories && <TabsTrigger value="lumber-credit">Crédito madereira</TabsTrigger>}
           <TabsTrigger value="owners">Proprietários</TabsTrigger>
           <TabsTrigger value="users">Usuários</TabsTrigger>
@@ -411,29 +435,55 @@ export function SettingsPage() {
         </TabsContent>
 
         {canEditCategories && (
-          <TabsContent value="financial">
+          <TabsContent value="secretary-access">
             <Card>
-              <CardHeader><CardTitle>Financeiro</CardTitle></CardHeader>
-              <CardContent className="space-y-5 max-w-lg">
-                <div className="flex items-center justify-between gap-4 rounded-lg border border-border/60 bg-surface-elevated px-4 py-3">
+              <CardHeader>
+                <CardTitle>Acesso da secretária</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6 max-w-xl">
+                <div className="flex items-center justify-between gap-4 rounded-lg border border-gold/40 bg-surface-elevated px-4 py-3">
                   <div className="min-w-0 flex-1">
-                    <Label htmlFor="secretary-financial-summary" className="text-sm font-medium text-white light:text-gray-900">
-                      Secretária vê resumo financeiro
+                    <Label htmlFor="secretary-view-amounts" className="text-sm font-medium text-white light:text-gray-900">
+                      Ver valores monetários
                     </Label>
                     <p className="mt-0.5 text-xs text-gray-500">
-                      {secretaryCanViewSummary
-                        ? 'ON — secretária visualiza Receitas/Despesas pagas e pendentes'
-                        : 'OFF — secretária lança pagamentos sem ver os totais do resumo'}
+                      {secretaryAccess.can_view_amounts
+                        ? 'ON — vê valores em pedidos, financeiro, crédito madeireira e KPIs'
+                        : 'OFF — acessa as telas, mas valores ficam ocultos (•••)'}
                     </p>
                   </div>
                   <Switch
-                    id="secretary-financial-summary"
-                    checked={secretaryCanViewSummary}
-                    onCheckedChange={setSecretaryCanViewSummary}
-                    aria-label="Permitir secretária ver resumo financeiro"
+                    id="secretary-view-amounts"
+                    checked={secretaryAccess.can_view_amounts}
+                    onCheckedChange={(v) => setSecretaryAccess((prev) => ({ ...prev, can_view_amounts: v }))}
+                    aria-label="Permitir secretária ver valores monetários"
                   />
                 </div>
-                <Button onClick={() => void saveFinancial()}>Salvar configurações</Button>
+
+                <div className="space-y-3">
+                  <p className="text-sm font-medium text-white light:text-gray-900">Módulos liberados</p>
+                  <p className="text-xs text-gray-500">
+                    Configurações permanece exclusiva do proprietário.
+                  </p>
+                  {SECRETARY_MODULE_KEYS.map((key) => (
+                    <div
+                      key={key}
+                      className="flex items-center justify-between gap-4 rounded-lg border border-border/60 bg-surface-elevated px-4 py-3"
+                    >
+                      <Label htmlFor={`secretary-mod-${key}`} className="text-sm text-white light:text-gray-900">
+                        {SECRETARY_MODULE_LABELS[key]}
+                      </Label>
+                      <Switch
+                        id={`secretary-mod-${key}`}
+                        checked={secretaryAccess.modules[key]}
+                        onCheckedChange={(v) => setSecretaryModule(key, v)}
+                        aria-label={SECRETARY_MODULE_LABELS[key]}
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                <Button onClick={() => void saveSecretaryAccess()}>Salvar acesso</Button>
               </CardContent>
             </Card>
           </TabsContent>

@@ -201,6 +201,17 @@ html, body {
 .proposal-env__icon {
   color: var(--proposal-gold);
   display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.proposal-env__monogram {
+  display: block;
+  width: 5mm;
+  height: 5mm;
+  object-fit: contain;
+  /* PNG tem fundo preto sólido — screen remove o preto no papel claro */
+  mix-blend-mode: screen;
 }
 
 .proposal-env__name {

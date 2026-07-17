@@ -7,6 +7,9 @@ import { NAV_ENTRIES } from '@/lib/navigation'
 import { useUIStore } from '@/stores/uiStore'
 import { useAuthStore } from '@/stores/authStore'
 import { hasPermission } from '@/lib/permissions'
+import { hasModuleAccess } from '@/lib/secretary-access'
+import { useSecretaryAccessSettings } from '@/hooks/useQueries'
+import { DEFAULT_SECRETARY_ACCESS } from '@/services/secretary-access.service'
 import { cn } from '@/lib/utils'
 import type { UserRole } from '@/types'
 
@@ -16,13 +19,22 @@ export function CommandPalette() {
   const recentPages = useUIStore((s) => s.recentPages)
   const addRecentPage = useUIStore((s) => s.addRecentPage)
   const role = useAuthStore((s) => s.profile?.role?.name) as UserRole | undefined
+  const { data: secretaryAccess } = useSecretaryAccessSettings()
+  const settings = secretaryAccess ?? DEFAULT_SECRETARY_ACCESS
   const navigate = useNavigate()
   const [query, setQuery] = useState('')
   const [activeIndex, setActiveIndex] = useState(0)
 
   const visibleEntries = useMemo(
-    () => NAV_ENTRIES.filter((e) => !e.permission || hasPermission(role, e.permission)),
-    [role]
+    () =>
+      NAV_ENTRIES.filter((e) => {
+        if (!e.permission) return true
+        if (e.permission.startsWith('settings.')) {
+          return hasPermission(role, e.permission) || hasPermission(role, '*')
+        }
+        return hasModuleAccess(role, e.permission, settings)
+      }),
+    [role, settings]
   )
 
   const filtered = useMemo(() => {

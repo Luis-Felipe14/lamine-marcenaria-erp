@@ -1,5 +1,8 @@
 import { useAuthStore } from '@/stores/authStore'
-import { hasPermission, canAccessDashboard, canAccessReports } from '@/lib/permissions'
+import { hasPermission } from '@/lib/permissions'
+import { hasModuleAccess } from '@/lib/secretary-access'
+import { useSecretaryAccessSettings } from '@/hooks/useQueries'
+import { DEFAULT_SECRETARY_ACCESS } from '@/services/secretary-access.service'
 import type { UserRole } from '@/types'
 
 interface PermissionRouteProps {
@@ -9,13 +12,13 @@ interface PermissionRouteProps {
 
 export function PermissionRoute({ permission, children }: PermissionRouteProps) {
   const role = useAuthStore((s) => s.profile?.role?.name) as UserRole | undefined
+  const { data: secretaryAccess } = useSecretaryAccessSettings()
+  const settings = secretaryAccess ?? DEFAULT_SECRETARY_ACCESS
 
   const allowed =
-    permission === 'dashboard.read'
-      ? canAccessDashboard(role)
-      : permission === 'reports.read'
-        ? canAccessReports(role)
-        : hasPermission(role, permission)
+    permission.startsWith('settings.')
+      ? hasPermission(role, permission) || hasPermission(role, '*')
+      : hasModuleAccess(role, permission, settings)
 
   if (!allowed) {
     return (

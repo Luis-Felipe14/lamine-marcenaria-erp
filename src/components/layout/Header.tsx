@@ -13,7 +13,9 @@ import { useBreadcrumb } from '@/hooks/useBreadcrumb'
 import { useHeaderHeightSync } from '@/hooks/useHeaderHeightSync'
 import { useViewport } from '@/hooks/useViewport'
 import { useHeaderMetrics, useNotifications } from '@/hooks/useQueries'
+import { useSecretaryAccess } from '@/hooks/useSecretaryAccess'
 import { cn, formatCurrency } from '@/lib/utils'
+import { formatCurrencyMasked } from '@/lib/secretary-access'
 
 export function Header() {
   const { sidebarCollapsed, theme, toggleTheme, setHeaderKpisVisible, setCommandPaletteOpen, toggleMobileNav } = useUIStore()
@@ -31,6 +33,7 @@ export function Header() {
 
   const { data: notifications = [] } = useNotifications(userId)
   const { data: kpis, isLoading: kpisLoading } = useHeaderMetrics()
+  const { canViewAmounts } = useSecretaryAccess()
 
   const isDashboardRoute = location.pathname === '/' || location.pathname.startsWith('/dashboard')
   const showHeaderKpis = Boolean(kpis) && !kpisLoading && !isDashboardRoute
@@ -54,9 +57,21 @@ export function Header() {
 
   const kpiItems = kpis
     ? [
-        { label: 'Receita', value: formatCurrency(kpis.monthlyRevenue), icon: TrendingUp, color: 'text-green-400', href: '/financeiro' },
+        {
+          label: 'Receita',
+          value: formatCurrencyMasked(kpis.monthlyRevenue, canViewAmounts, formatCurrency),
+          icon: TrendingUp,
+          color: 'text-green-400',
+          href: '/financeiro',
+        },
         { label: 'Pedidos', value: String(kpis.activeOrders), icon: Package, color: 'text-blue-400', href: '/pedidos' },
-        { label: 'A receber', value: formatCurrency(kpis.accountsReceivable), icon: Wallet, color: 'text-gold', href: '/financeiro' },
+        {
+          label: 'A receber',
+          value: formatCurrencyMasked(kpis.accountsReceivable, canViewAmounts, formatCurrency),
+          icon: Wallet,
+          color: 'text-gold',
+          href: '/financeiro',
+        },
         { label: 'Estoque', value: String(kpis.criticalStock), icon: AlertTriangle, color: kpis.criticalStock > 0 ? 'text-red-400' : 'text-gray-400', href: '/estoque' },
       ]
     : []

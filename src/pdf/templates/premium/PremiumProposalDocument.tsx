@@ -26,6 +26,7 @@ export function PremiumProposalDocument({ data }: PremiumProposalDocumentProps) 
                 key={`${environment.name}-${index}`}
                 environment={environment}
                 showItemPrices={showItemPrices}
+                monogramUrl={data.company.monogramUrl}
               />
             ))}
             <ProposalBottomSection data={data} />

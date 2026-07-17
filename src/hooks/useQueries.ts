@@ -1,8 +1,9 @@
 import { useMemo } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { hasPermission } from '@/lib/permissions'
+import { hasModuleAccess } from '@/lib/secretary-access'
 import { queryKeys } from '@/lib/query-keys'
 import { useAuthStore } from '@/stores/authStore'
+import { DEFAULT_SECRETARY_ACCESS } from '@/services/secretary-access.service'
 import {
   countCriticalStock,
   getExecutiveMetrics,
@@ -16,6 +17,7 @@ import {
   getNotifications,
 } from '@/services/dashboard.service'
 import { getFinancialSummary, getFinancialSettings, listFinancialTransactions } from '@/services/financial.service'
+import { getSecretaryAccessSettings } from '@/services/secretary-access.service'
 import {
   computeLumberCreditStats,
   getLumberCreditSettings,
@@ -77,7 +79,12 @@ export function useCommercialMetrics() {
 
 export function useOperationalMetrics() {
   const role = useAuthStore((s) => s.profile?.role?.name)
-  const includeLumberCredit = hasPermission(role, 'lumber_credit.read')
+  const { data: secretaryAccess } = useSecretaryAccessSettings()
+  const includeLumberCredit = hasModuleAccess(
+    role,
+    'lumber_credit.read',
+    secretaryAccess ?? DEFAULT_SECRETARY_ACCESS,
+  )
 
   return useQuery({
     queryKey: [...queryKeys.operationalMetrics, includeLumberCredit],
@@ -138,6 +145,14 @@ export function useFinancialSettings() {
   return useQuery({
     queryKey: queryKeys.financialSettings,
     queryFn: getFinancialSettings,
+    staleTime: 60_000,
+  })
+}
+
+export function useSecretaryAccessSettings() {
+  return useQuery({
+    queryKey: queryKeys.secretaryAccess,
+    queryFn: getSecretaryAccessSettings,
     staleTime: 60_000,
   })
 }

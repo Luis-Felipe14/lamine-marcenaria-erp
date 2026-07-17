@@ -14,16 +14,19 @@ import { ORDER_STATUSES } from '@/lib/constants'
 import { queryKeys } from '@/lib/query-keys'
 import { invalidateDashboardMetrics } from '@/lib/invalidate-dashboard'
 import { formatCurrency } from '@/lib/utils'
+import { formatCurrencyMasked } from '@/lib/secretary-access'
 import { getOrderTimeline, type KanbanOrder, type OrderTimelineEvent } from '@/services/orders.service'
 import { updateRecord, softDelete } from '@/services/api'
 import { useAuthStore } from '@/stores/authStore'
 import { useConfirm } from '@/hooks/useConfirm'
 import { useOrdersKanban } from '@/hooks/useQueries'
+import { useSecretaryAccess } from '@/hooks/useSecretaryAccess'
 
 export function OrdersPage() {
   const queryClient = useQueryClient()
   const { confirm, dialogProps } = useConfirm()
   const { data: orders = [], isLoading: loading } = useOrdersKanban()
+  const { canViewAmounts } = useSecretaryAccess()
   const [selected, setSelected] = useState<KanbanOrder | null>(null)
   const [timeline, setTimeline] = useState<OrderTimelineEvent[]>([])
   const [timelineLoading, setTimelineLoading] = useState(false)
@@ -135,7 +138,7 @@ export function OrdersPage() {
             <DialogHeader>
               <DialogTitle>Pedido #{selected.number}</DialogTitle>
               <DialogDescription>
-                {selected.client?.name} — {formatCurrency(selected.value)}
+                {selected.client?.name} — {formatCurrencyMasked(selected.value, canViewAmounts, formatCurrency)}
               </DialogDescription>
             </DialogHeader>
 

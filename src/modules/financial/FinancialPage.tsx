@@ -25,6 +25,7 @@ import {
   type FinancialFormState,
 } from '@/lib/financial-form.schema'
 import { formatCurrency, formatDate, formatInstallment, getDueUrgency, getDueUrgencyLabel } from '@/lib/utils'
+import { formatCurrencyMasked } from '@/lib/secretary-access'
 import { invalidateDashboardMetrics } from '@/lib/invalidate-dashboard'
 import { createRecord, updateRecord, softDelete } from '@/services/api'
 import {
@@ -36,7 +37,6 @@ import {
 } from '@/services/financial.service'
 import {
   useFinancialSummary,
-  useFinancialSettings,
   useFinancialTransactions,
   useLookupClients,
   useLookupOrders,
@@ -46,15 +46,13 @@ import {
 } from '@/hooks/useQueries'
 import { FinancialTransactionForm } from '@/modules/financial/FinancialTransactionForm'
 import { useConfirm } from '@/hooks/useConfirm'
-import { useAuthStore } from '@/stores/authStore'
-import { normalizeRole } from '@/lib/permissions'
+import { useSecretaryAccess } from '@/hooks/useSecretaryAccess'
 
 interface Transaction extends FinancialTransaction {}
 
 export function FinancialPage() {
   const queryClient = useQueryClient()
   const { confirm, dialogProps } = useConfirm()
-  const roleName = useAuthStore((s) => s.profile?.role?.name)
   const [filter, setFilter] = useState<'all' | 'receita' | 'despesa'>('all')
   const [page, setPage] = useState(1)
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -69,7 +67,7 @@ export function FinancialPage() {
 
   const { data: txResult, isLoading, isFetching } = useFinancialTransactions(page, filter)
   const { data: summary = { receitas: 0, despesas: 0, aPagar: 0, aReceber: 0 } } = useFinancialSummary()
-  const { data: financialSettings } = useFinancialSettings()
+  const { canViewAmounts } = useSecretaryAccess()
   const { data: clients = [] } = useLookupClients()
   const { data: orders = [] } = useLookupOrders()
   const { data: purchases = [] } = useLookupPurchases()
@@ -78,8 +76,8 @@ export function FinancialPage() {
 
   const transactions = txResult?.data ?? []
   const totalPages = txResult?.totalPages ?? 1
-  const isSecretary = normalizeRole(roleName) === 'secretaria'
-  const showFinancialSummary = !isSecretary || Boolean(financialSettings?.secretary_can_view_summary)
+  const showFinancialSummary = canViewAmounts
+  const money = (value: number) => formatCurrencyMasked(value, canViewAmounts, formatCurrency)
 
   useEffect(() => {
     setPage(1)
@@ -269,7 +267,7 @@ export function FinancialPage() {
     const label = row.employee?.name ?? row.description
     if (!await confirm({
       title: 'Excluir lançamento',
-      message: `Deseja excluir este lançamento (${label} — ${formatCurrency(row.amount)})? Esta ação não pode ser desfeita.`,
+      message: `Deseja excluir este lançamento (${label} — ${money(row.amount)})? Esta ação não pode ser desfeita.`,
     })) return
 
     try {
@@ -341,10 +339,10 @@ export function FinancialPage() {
       {showFinancialSummary && (
         <PageKpiZone label="Resumo financeiro">
           <StatGrid strip>
-            <StatCard title="Receitas Pagas" value={formatCurrency(summary.receitas)} icon={TrendingUp} subtitle="Entradas confirmadas" />
-            <StatCard title="Despesas Pagas" value={formatCurrency(summary.despesas)} icon={TrendingDown} subtitle="Saídas confirmadas" />
-            <StatCard title="A Receber" value={formatCurrency(summary.aReceber)} icon={TrendingUp} subtitle="Pendente de recebimento" />
-            <StatCard title="A Pagar" value={formatCurrency(summary.aPagar)} icon={TrendingDown} subtitle="Pendente de pagamento" />
+            <StatCard title="Receitas Pagas" value={money(summary.receitas)} icon={TrendingUp} subtitle="Entradas confirmadas" />
+            <StatCard title="Despesas Pagas" value={money(summary.despesas)} icon={TrendingDown} subtitle="Saídas confirmadas" />
+            <StatCard title="A Receber" value={money(summary.aReceber)} icon={TrendingUp} subtitle="Pendente de recebimento" />
+            <StatCard title="A Pagar" value={money(summary.aPagar)} icon={TrendingDown} subtitle="Pendente de pagamento" />
           </StatGrid>
         </PageKpiZone>
       )}
@@ -387,10 +385,10 @@ export function FinancialPage() {
             header: 'Valor',
             render: (r) => (
               <div className="flex flex-col">
-                <span>{formatCurrency(r.amount)}</span>
+                <span>{money(r.amount)}</span>
                 {r.is_installment_plan && r.plan_total_amount != null && (
                   <span className="text-[10px] text-gray-500">
-                    Total {formatCurrency(Number(r.plan_total_amount))}
+                    Total {money(Number(r.plan_total_amount))}
                   </span>
                 )}
               </div>
@@ -500,7 +498,7 @@ export function FinancialPage() {
             <div className="space-y-2">
               {scheduleTx?.plan_total_amount != null && (
                 <p className="text-xs text-gray-500">
-                  Total do bem: {formatCurrency(Number(scheduleTx.plan_total_amount))}
+                  Total do bem: {money(Number(scheduleTx.plan_total_amount))}
                   {scheduleTx.installment_total ? ` · ${scheduleTx.installment_total}x` : ''}
                 </p>
               )}
@@ -515,7 +513,7 @@ export function FinancialPage() {
                     <div className="min-w-0">
                       <p className="text-sm font-medium">
                         Parcela {s.installment_number}
-                        <span className="ml-2 text-gray-400">{formatCurrency(s.amount)}</span>
+                        <span className="ml-2 text-gray-400">{money(s.amount)}</span>
                       </p>
                       <p className={`text-xs ${
                         urgency === 'overdue' || urgency === 'today'

@@ -2,6 +2,8 @@ import { lazy, Suspense } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
 import { DASHBOARD_SECTIONS, getAccessibleDashboardSections } from '@/lib/dashboard-access'
+import { useSecretaryAccessSettings } from '@/hooks/useQueries'
+import { DEFAULT_SECRETARY_ACCESS } from '@/services/secretary-access.service'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { UserRole } from '@/types'
 
@@ -24,7 +26,8 @@ function DashboardLoader() {
 
 export function DashboardIndex() {
   const role = useAuthStore((s) => s.profile?.role?.name) as UserRole | undefined
-  const accessible = getAccessibleDashboardSections(role)
+  const { data: secretaryAccess } = useSecretaryAccessSettings()
+  const accessible = getAccessibleDashboardSections(role, secretaryAccess ?? DEFAULT_SECRETARY_ACCESS)
 
   if (accessible.includes('executivo')) {
     return (

@@ -8,6 +8,8 @@ import { QuickActions } from '@/components/shared/QuickActions'
 import { ActivityCenter } from '@/components/shared/ActivityCenter'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useUIStore } from '@/stores/uiStore'
+import { useSecretaryAccessSettings } from '@/hooks/useQueries'
+import { DEFAULT_SECRETARY_ACCESS } from '@/services/secretary-access.service'
 import { cn } from '@/lib/utils'
 import type { UserRole } from '@/types'
 
@@ -21,7 +23,8 @@ const TAB_ICONS: Record<DashboardSection, typeof LayoutDashboard> = {
 export function DashboardShell() {
   const headerKpisVisible = useUIStore((s) => s.headerKpisVisible)
   const role = useAuthStore((s) => s.profile?.role?.name) as UserRole | undefined
-  const accessible = getAccessibleDashboardSections(role)
+  const { data: secretaryAccess } = useSecretaryAccessSettings()
+  const accessible = getAccessibleDashboardSections(role, secretaryAccess ?? DEFAULT_SECRETARY_ACCESS)
   const tabs = DASHBOARD_SECTIONS.filter((s) => accessible.includes(s.id))
 
   return (

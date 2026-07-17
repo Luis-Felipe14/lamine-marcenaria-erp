@@ -2,7 +2,9 @@ import { useNavigate } from 'react-router-dom'
 import { Plus, Target, FileText, Package, Factory, DollarSign } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { hasPermission } from '@/lib/permissions'
+import { hasModuleAccess } from '@/lib/secretary-access'
+import { useSecretaryAccessSettings } from '@/hooks/useQueries'
+import { DEFAULT_SECRETARY_ACCESS } from '@/services/secretary-access.service'
 import { useAuthStore } from '@/stores/authStore'
 import type { UserRole } from '@/types'
 
@@ -17,7 +19,9 @@ const actions = [
 export function QuickActions({ compact = false, className }: { compact?: boolean; className?: string }) {
   const navigate = useNavigate()
   const role = useAuthStore((s) => s.profile?.role?.name) as UserRole | undefined
-  const visible = actions.filter((a) => hasPermission(role, a.permission) || hasPermission(role, a.permission.replace('.read', '.*')))
+  const { data: secretaryAccess } = useSecretaryAccessSettings()
+  const settings = secretaryAccess ?? DEFAULT_SECRETARY_ACCESS
+  const visible = actions.filter((a) => hasModuleAccess(role, a.permission, settings))
 
   if (visible.length === 0) return null
 
