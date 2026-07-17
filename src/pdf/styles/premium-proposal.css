@@ -133,6 +133,15 @@ html, body {
   line-height: 1.3;
 }
 
+.proposal-meta-bar__detail {
+  display: block;
+  margin-top: 1mm;
+  font-size: 6.5px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--proposal-muted);
+}
+
 /* ── Body grid ── */
 .proposal-body {
   display: grid;

@@ -8,8 +8,8 @@ interface ProposalMetaBarProps {
 export function ProposalMetaBar({ data }: ProposalMetaBarProps) {
   const { budget, client } = data
 
-  const items = [
-    { label: 'Cliente', value: client.name },
+  const items: { label: string; value: string; detail?: string }[] = [
+    { label: 'Cliente', value: client.name, detail: client.address },
     { label: 'Projeto', value: budget.projectName },
     { label: 'Data', value: formatDate(budget.date) },
     { label: 'Validade', value: `${budget.validityDays} dias` },
@@ -22,6 +22,9 @@ export function ProposalMetaBar({ data }: ProposalMetaBarProps) {
         <div key={item.label} className="proposal-meta-bar__item">
           <span className="proposal-meta-bar__label">{item.label}</span>
           <span className="proposal-meta-bar__value">{item.value}</span>
+          {item.detail ? (
+            <span className="proposal-meta-bar__detail">{item.detail}</span>
+          ) : null}
         </div>
       ))}
     </div>
