@@ -1,5 +1,4 @@
 import { hasPermission, normalizeRole } from '@/lib/permissions'
-import { hasModuleAccess } from '@/lib/secretary-access'
 import type { SecretaryAccessSettings } from '@/services/secretary-access.service'
 import { DEFAULT_SECRETARY_ACCESS } from '@/services/secretary-access.service'
 import type { UserRole } from '@/types'
@@ -31,16 +30,10 @@ export function canAccessDashboardSection(
   const settings = secretarySettings ?? DEFAULT_SECRETARY_ACCESS
 
   if (normalized === 'secretaria') {
-    if (section === 'financeiro') {
-      return hasModuleAccess(role, 'financial.read', settings)
-    }
-    if (section === 'operacional' || section === 'executivo') {
-      return hasModuleAccess(role, 'dashboard.read', settings)
-    }
-    if (section === 'comercial') {
-      return hasModuleAccess(role, 'crm.read', settings) || hasModuleAccess(role, 'clients.read', settings)
-    }
-    return false
+    if (!settings.modules.dashboard) return false
+    return Boolean(
+      settings.dashboard_sections?.[section] ?? DEFAULT_SECRETARY_ACCESS.dashboard_sections[section],
+    )
   }
 
   if (hasPermission(role, '*') || hasPermission(role, 'dashboard.*')) return true

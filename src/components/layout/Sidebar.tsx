@@ -11,7 +11,8 @@ import { useUIStore } from '@/stores/uiStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useAuth } from '@/hooks/useAuth'
 import { hasPermission } from '@/lib/permissions'
-import { hasModuleAccess } from '@/lib/secretary-access'
+import { hasPathAccess } from '@/lib/secretary-access'
+import { getAccessibleDashboardSections } from '@/lib/dashboard-access'
 import { useSecretaryAccessSettings, useSidebarBadgesQuery } from '@/hooks/useQueries'
 import { DEFAULT_SECRETARY_ACCESS, type SecretaryAccessSettings } from '@/services/secretary-access.service'
 import type { UserRole } from '@/types'
@@ -90,9 +91,11 @@ function isItemVisible(
   if (item.to === '/configuracoes') {
     return hasPermission(role, item.permission) || hasPermission(role, '*')
   }
-  if (item.to === '/') return hasModuleAccess(role, 'dashboard.read', settings)
-  if (item.to === '/relatorios') return hasModuleAccess(role, 'reports.read', settings)
-  return hasModuleAccess(role, item.permission, settings)
+  // Dashboard Geral: aparece se houver ao menos uma aba liberada
+  if (item.to === '/') {
+    return getAccessibleDashboardSections(role, settings).length > 0
+  }
+  return hasPathAccess(role, item.to, settings)
 }
 
 function filterVisibleGroups(

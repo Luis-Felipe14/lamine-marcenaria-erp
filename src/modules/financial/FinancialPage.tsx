@@ -67,7 +67,7 @@ export function FinancialPage() {
 
   const { data: txResult, isLoading, isFetching } = useFinancialTransactions(page, filter)
   const { data: summary = { receitas: 0, despesas: 0, aPagar: 0, aReceber: 0 } } = useFinancialSummary()
-  const { canViewAmounts } = useSecretaryAccess()
+  const { canViewAmounts, canEditFinancial } = useSecretaryAccess()
   const { data: clients = [] } = useLookupClients()
   const { data: orders = [] } = useLookupOrders()
   const { data: purchases = [] } = useLookupPurchases()
@@ -91,12 +91,14 @@ export function FinancialPage() {
   }
 
   const openCreate = () => {
+    if (!canEditFinancial) return
     setEditing(null)
     setForm(createEmptyFinancialForm())
     setDialogOpen(true)
   }
 
   const openEdit = (row: Transaction) => {
+    if (!canEditFinancial) return
     const matchedEmployee = row.employee_id
       ? employees.find((e) => e.id === row.employee_id)
       : employees.find((e) => e.name === row.description)
@@ -140,6 +142,7 @@ export function FinancialPage() {
   }
 
   const onSubmit = async () => {
+    if (!canEditFinancial) return
     const fields = getFinancialFormFields(form, { isEditing: Boolean(editing) })
     const validationError = validateFinancialForm(form, fields)
     if (validationError) {
@@ -264,6 +267,7 @@ export function FinancialPage() {
   }
 
   const handleDelete = async (row: Transaction) => {
+    if (!canEditFinancial) return
     const label = row.employee?.name ?? row.description
     if (!await confirm({
       title: 'Excluir lançamento',
@@ -306,6 +310,7 @@ export function FinancialPage() {
         title="Financeiro"
         description="Fluxo de caixa, contas e DRE"
         actions={
+          canEditFinancial ? (
           <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setEditing(null) }}>
             <DialogTrigger asChild>
               <Button onClick={openCreate}><Plus className="h-4 w-4" /> Novo Lançamento</Button>
@@ -333,6 +338,7 @@ export function FinancialPage() {
               )}
             </DialogContent>
           </Dialog>
+          ) : undefined
         }
       />
 
@@ -458,12 +464,16 @@ export function FinancialPage() {
                     <ListOrdered className="h-3.5 w-3.5" />
                   </Button>
                 )}
-                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(r)} aria-label="Editar">
-                  <Pencil className="h-3.5 w-3.5" />
-                </Button>
-                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => void handleDelete(r)} aria-label="Excluir">
-                  <Trash2 className="h-3.5 w-3.5 text-red-400" />
-                </Button>
+                {canEditFinancial && (
+                  <>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(r)} aria-label="Editar">
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => void handleDelete(r)} aria-label="Excluir">
+                      <Trash2 className="h-3.5 w-3.5 text-red-400" />
+                    </Button>
+                  </>
+                )}
               </div>
             ),
           },

@@ -1,5 +1,9 @@
 import { normalizeRole, hasPermission, canAccessDashboard, canAccessReports } from '@/lib/permissions'
-import type { SecretaryAccessSettings, SecretaryModuleKey } from '@/services/secretary-access.service'
+import type {
+  DashboardSectionKey,
+  SecretaryAccessSettings,
+  SecretaryModuleKey,
+} from '@/services/secretary-access.service'
 import { DEFAULT_SECRETARY_ACCESS } from '@/services/secretary-access.service'
 
 /** Mapa permission string → módulo liberável da secretária */
@@ -9,6 +13,7 @@ const PERMISSION_TO_MODULE: Record<string, SecretaryModuleKey> = {
   'dashboard.operacional': 'dashboard',
   'dashboard.comercial': 'dashboard',
   'dashboard.financeiro': 'dashboard',
+  'dashboard.executivo': 'dashboard',
   'crm.read': 'crm',
   'crm.*': 'crm',
   'clients.read': 'clientes',
@@ -23,10 +28,10 @@ const PERMISSION_TO_MODULE: Record<string, SecretaryModuleKey> = {
   'inventory.*': 'estoque',
   'purchases.read': 'compras',
   'purchases.*': 'compras',
-  'lumber_credit.read': 'financeiro_madereira',
-  'lumber_credit.*': 'financeiro_madereira',
-  'financial.read': 'financeiro_madereira',
-  'financial.*': 'financeiro_madereira',
+  'lumber_credit.read': 'credito_madereira',
+  'lumber_credit.*': 'credito_madereira',
+  'financial.read': 'financeiro',
+  'financial.*': 'financeiro',
   'marketing.read': 'marketing',
   'marketing.*': 'marketing',
   'employees.read': 'funcionarios',
@@ -46,20 +51,35 @@ const PATH_TO_MODULE: Record<string, SecretaryModuleKey> = {
   '/dashboard/financeiro': 'dashboard',
   '/crm': 'crm',
   '/clientes': 'clientes',
-  '/arquitetos': 'clientes',
+  '/arquitetos': 'arquitetos',
   '/orcamentos': 'orcamentos',
   '/pedidos': 'pedidos',
   '/producao': 'producao',
   '/estoque': 'estoque',
   '/compras': 'compras',
-  '/fornecedores': 'compras',
-  '/credito-madereira': 'financeiro_madereira',
-  '/financeiro': 'financeiro_madereira',
+  '/fornecedores': 'fornecedores',
+  '/credito-madereira': 'credito_madereira',
+  '/financeiro': 'financeiro',
   '/marketing': 'marketing',
   '/funcionarios': 'funcionarios',
   '/folha': 'folha',
   '/solicitacoes': 'solicitacoes',
   '/relatorios': 'relatorios',
+}
+
+const PATH_TO_DASHBOARD_SECTION: Record<string, DashboardSectionKey> = {
+  '/': 'executivo',
+  '/dashboard/comercial': 'comercial',
+  '/dashboard/operacional': 'operacional',
+  '/dashboard/financeiro': 'financeiro',
+}
+
+export function pathToDashboardSection(path: string): DashboardSectionKey | null {
+  if (PATH_TO_DASHBOARD_SECTION[path]) return PATH_TO_DASHBOARD_SECTION[path]
+  if (path.startsWith('/dashboard/comercial')) return 'comercial'
+  if (path.startsWith('/dashboard/operacional')) return 'operacional'
+  if (path.startsWith('/dashboard/financeiro')) return 'financeiro'
+  return null
 }
 
 export function permissionToSecretaryModule(permission: string): SecretaryModuleKey | null {
@@ -72,9 +92,18 @@ export function permissionToSecretaryModule(permission: string): SecretaryModule
 
 export function pathToSecretaryModule(path: string): SecretaryModuleKey | null {
   if (PATH_TO_MODULE[path]) return PATH_TO_MODULE[path]
-  // Match prefix for nested paths
   const entry = Object.entries(PATH_TO_MODULE).find(([p]) => p !== '/' && path.startsWith(p))
   return entry?.[1] ?? null
+}
+
+function secretaryHasDashboardSection(
+  settings: SecretaryAccessSettings,
+  section: DashboardSectionKey,
+): boolean {
+  if (!settings.modules.dashboard) return false
+  return Boolean(
+    settings.dashboard_sections?.[section] ?? DEFAULT_SECRETARY_ACCESS.dashboard_sections[section],
+  )
 }
 
 /**
@@ -91,13 +120,19 @@ export function hasModuleAccess(
   if (!normalized) return false
 
   if (normalized === 'secretaria') {
-    // Configurações nunca liberadas pela UI de módulos
     if (permission.startsWith('settings.')) return false
 
     const moduleKey = permissionToSecretaryModule(permission)
     if (!moduleKey) return false
-    const modules = settings?.modules ?? DEFAULT_SECRETARY_ACCESS.modules
-    return Boolean(modules[moduleKey])
+    const access = settings ?? DEFAULT_SECRETARY_ACCESS
+    if (!access.modules[moduleKey]) return false
+
+    if (permission === 'dashboard.executivo') return secretaryHasDashboardSection(access, 'executivo')
+    if (permission === 'dashboard.comercial') return secretaryHasDashboardSection(access, 'comercial')
+    if (permission === 'dashboard.operacional') return secretaryHasDashboardSection(access, 'operacional')
+    if (permission === 'dashboard.financeiro') return secretaryHasDashboardSection(access, 'financeiro')
+
+    return true
   }
 
   if (permission === 'dashboard.read') return canAccessDashboard(role)
@@ -117,27 +152,34 @@ export function hasPathAccess(
     return hasPermission(role, 'settings.read') || hasPermission(role, '*')
   }
 
+  const access = settings ?? DEFAULT_SECRETARY_ACCESS
+  const dashboardSection = pathToDashboardSection(path)
+
   if (normalized === 'secretaria') {
+    if (dashboardSection) {
+      return secretaryHasDashboardSection(access, dashboardSection)
+    }
     const moduleKey = pathToSecretaryModule(path)
     if (!moduleKey) return false
-    const modules = settings?.modules ?? DEFAULT_SECRETARY_ACCESS.modules
-    return Boolean(modules[moduleKey])
+    return Boolean(access.modules[moduleKey])
   }
 
-  // Demais: resolve permission pelo path conhecido
   const moduleKey = pathToSecretaryModule(path)
   if (!moduleKey) return hasPermission(role, '*')
-  // Reuse ROLE via a representative permission
+
   const representative: Record<SecretaryModuleKey, string> = {
     dashboard: 'dashboard.read',
     crm: 'crm.read',
     clientes: 'clients.read',
+    arquitetos: 'clients.read',
     orcamentos: 'budgets.read',
     pedidos: 'orders.read',
     producao: 'production.read',
     estoque: 'inventory.read',
     compras: 'purchases.read',
-    financeiro_madereira: path.includes('credito') ? 'lumber_credit.read' : 'financial.read',
+    fornecedores: 'purchases.read',
+    financeiro: 'financial.read',
+    credito_madereira: 'lumber_credit.read',
     marketing: 'marketing.read',
     funcionarios: 'employees.read',
     folha: 'payroll.read',
@@ -158,8 +200,25 @@ export function canViewMonetaryAmounts(
   if (normalized === 'secretaria') {
     return Boolean(settings?.can_view_amounts ?? DEFAULT_SECRETARY_ACCESS.can_view_amounts)
   }
-  // Produção: sem acesso financeiro típico; se chegar a tela, não mostra valores
   return false
+}
+
+/**
+ * Criar/editar/excluir lançamentos no Financeiro.
+ * Secretária precisa do módulo financeiro + can_edit_financial.
+ */
+export function canEditFinancialTransactions(
+  role: string | undefined,
+  settings: SecretaryAccessSettings | undefined | null,
+): boolean {
+  const normalized = normalizeRole(role)
+  if (!normalized) return false
+  if (normalized === 'gestor') return true
+  if (normalized === 'secretaria') {
+    const modules = settings?.modules ?? DEFAULT_SECRETARY_ACCESS.modules
+    return Boolean(modules.financeiro && (settings?.can_edit_financial ?? false))
+  }
+  return hasPermission(role, 'financial.*') || hasPermission(role, 'financial.write')
 }
 
 export function formatCurrencyMasked(

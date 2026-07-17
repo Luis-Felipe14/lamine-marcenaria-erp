@@ -7,7 +7,8 @@ import { NAV_ENTRIES } from '@/lib/navigation'
 import { useUIStore } from '@/stores/uiStore'
 import { useAuthStore } from '@/stores/authStore'
 import { hasPermission } from '@/lib/permissions'
-import { hasModuleAccess } from '@/lib/secretary-access'
+import { hasPathAccess } from '@/lib/secretary-access'
+import { getAccessibleDashboardSections } from '@/lib/dashboard-access'
 import { useSecretaryAccessSettings } from '@/hooks/useQueries'
 import { DEFAULT_SECRETARY_ACCESS } from '@/services/secretary-access.service'
 import { cn } from '@/lib/utils'
@@ -32,7 +33,10 @@ export function CommandPalette() {
         if (e.permission.startsWith('settings.')) {
           return hasPermission(role, e.permission) || hasPermission(role, '*')
         }
-        return hasModuleAccess(role, e.permission, settings)
+        if (e.path === '/') {
+          return getAccessibleDashboardSections(role, settings).length > 0
+        }
+        return hasPathAccess(role, e.path, settings)
       }),
     [role, settings]
   )

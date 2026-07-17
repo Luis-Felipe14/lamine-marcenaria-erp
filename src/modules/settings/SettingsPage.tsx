@@ -34,9 +34,13 @@ import { useMaterialCategories, useInvalidateMaterialCategories } from '@/hooks/
 import { saveLumberCreditSettings } from '@/services/lumberyard-credit.service'
 import {
   DEFAULT_SECRETARY_ACCESS,
+  DASHBOARD_SECTION_KEYS,
+  DASHBOARD_SECTION_LABELS,
   SECRETARY_MODULE_KEYS,
   SECRETARY_MODULE_LABELS,
+  getSecretaryAccessSettings,
   saveSecretaryAccessSettings,
+  type DashboardSectionKey,
   type SecretaryAccessSettings,
   type SecretaryModuleKey,
 } from '@/services/secretary-access.service'
@@ -134,11 +138,10 @@ export function SettingsPage() {
 
   useEffect(() => {
     async function load() {
-      const [{ data: settings }, { data: goals }, { data: lumberCredit }, { data: secretary }] = await Promise.all([
+      const [{ data: settings }, { data: goals }, { data: lumberCredit }] = await Promise.all([
         supabase.from('settings').select('*').eq('key', 'company').single(),
         supabase.from('settings').select('*').eq('key', 'goals').maybeSingle(),
         supabase.from('settings').select('*').eq('key', 'lumber_credit').maybeSingle(),
-        supabase.from('settings').select('*').eq('key', 'secretary_access').maybeSingle(),
       ])
       if (settings?.value) setCompany(settings.value as CompanySettings)
       const goalsVal = goals?.value as {
@@ -151,17 +154,11 @@ export function SettingsPage() {
       const lumberVal = lumberCredit?.value as { allow_cross_client?: boolean } | undefined
       setAllowCrossClientCredit(lumberVal?.allow_cross_client ?? false)
 
-      const secretaryVal = secretary?.value as Partial<SecretaryAccessSettings> | undefined
-      let canViewAmounts = secretaryVal?.can_view_amounts
-      if (typeof canViewAmounts !== 'boolean') {
-        const { data: financial } = await supabase.from('settings').select('value').eq('key', 'financial').maybeSingle()
-        const financialVal = financial?.value as { secretary_can_view_summary?: boolean } | undefined
-        canViewAmounts = financialVal?.secretary_can_view_summary ?? false
+      try {
+        setSecretaryAccess(await getSecretaryAccessSettings())
+      } catch {
+        setSecretaryAccess(DEFAULT_SECRETARY_ACCESS)
       }
-      setSecretaryAccess({
-        modules: { ...DEFAULT_SECRETARY_ACCESS.modules, ...secretaryVal?.modules },
-        can_view_amounts: canViewAmounts ?? false,
-      })
 
       await loadUsers()
       setLoading(false)
@@ -212,6 +209,13 @@ export function SettingsPage() {
     setSecretaryAccess((prev) => ({
       ...prev,
       modules: { ...prev.modules, [key]: enabled },
+    }))
+  }
+
+  const setDashboardSection = (key: DashboardSectionKey, enabled: boolean) => {
+    setSecretaryAccess((prev) => ({
+      ...prev,
+      dashboard_sections: { ...prev.dashboard_sections, [key]: enabled },
     }))
   }
 
@@ -466,19 +470,69 @@ export function SettingsPage() {
                     Configurações permanece exclusiva do proprietário.
                   </p>
                   {SECRETARY_MODULE_KEYS.map((key) => (
-                    <div
-                      key={key}
-                      className="flex items-center justify-between gap-4 rounded-lg border border-border/60 bg-surface-elevated px-4 py-3"
-                    >
-                      <Label htmlFor={`secretary-mod-${key}`} className="text-sm text-white light:text-gray-900">
-                        {SECRETARY_MODULE_LABELS[key]}
-                      </Label>
-                      <Switch
-                        id={`secretary-mod-${key}`}
-                        checked={secretaryAccess.modules[key]}
-                        onCheckedChange={(v) => setSecretaryModule(key, v)}
-                        aria-label={SECRETARY_MODULE_LABELS[key]}
-                      />
+                    <div key={key} className="space-y-2">
+                      <div className="flex items-center justify-between gap-4 rounded-lg border border-border/60 bg-surface-elevated px-4 py-3">
+                        <Label htmlFor={`secretary-mod-${key}`} className="text-sm text-white light:text-gray-900">
+                          {SECRETARY_MODULE_LABELS[key]}
+                        </Label>
+                        <Switch
+                          id={`secretary-mod-${key}`}
+                          checked={secretaryAccess.modules[key]}
+                          onCheckedChange={(v) => {
+                            setSecretaryModule(key, v)
+                            if (key === 'financeiro' && !v) {
+                              setSecretaryAccess((prev) => ({ ...prev, can_edit_financial: false }))
+                            }
+                          }}
+                          aria-label={SECRETARY_MODULE_LABELS[key]}
+                        />
+                      </div>
+                      {key === 'dashboard' && secretaryAccess.modules.dashboard && (
+                        <div className="ml-4 space-y-2">
+                          <p className="px-1 text-xs text-gray-500">Abas do Dashboard Geral</p>
+                          {DASHBOARD_SECTION_KEYS.map((section) => (
+                            <div
+                              key={section}
+                              className="flex items-center justify-between gap-4 rounded-lg border border-border/40 bg-surface-elevated/70 px-4 py-3"
+                            >
+                              <Label
+                                htmlFor={`secretary-dash-${section}`}
+                                className="text-sm text-white light:text-gray-900"
+                              >
+                                {DASHBOARD_SECTION_LABELS[section]}
+                              </Label>
+                              <Switch
+                                id={`secretary-dash-${section}`}
+                                checked={secretaryAccess.dashboard_sections[section]}
+                                onCheckedChange={(v) => setDashboardSection(section, v)}
+                                aria-label={`Dashboard ${DASHBOARD_SECTION_LABELS[section]}`}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {key === 'financeiro' && secretaryAccess.modules.financeiro && (
+                        <div className="ml-4 flex items-center justify-between gap-4 rounded-lg border border-border/40 bg-surface-elevated/70 px-4 py-3">
+                          <div className="min-w-0 flex-1">
+                            <Label htmlFor="secretary-edit-financial" className="text-sm text-white light:text-gray-900">
+                              Editar lançamentos
+                            </Label>
+                            <p className="mt-0.5 text-xs text-gray-500">
+                              {secretaryAccess.can_edit_financial
+                                ? 'ON — pode criar, editar e excluir lançamentos'
+                                : 'OFF — só visualiza a lista (sem abrir formulário com valores)'}
+                            </p>
+                          </div>
+                          <Switch
+                            id="secretary-edit-financial"
+                            checked={secretaryAccess.can_edit_financial}
+                            onCheckedChange={(v) =>
+                              setSecretaryAccess((prev) => ({ ...prev, can_edit_financial: v }))
+                            }
+                            aria-label="Permitir secretária editar lançamentos financeiros"
+                          />
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
