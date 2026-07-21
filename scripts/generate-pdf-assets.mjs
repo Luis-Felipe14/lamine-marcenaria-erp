@@ -15,6 +15,7 @@ await mkdir(outDir, { recursive: true })
 
 const logoSrc = join(root, 'public', 'lamine-logo.png')
 const bgSrc = join(root, 'public', 'lamine-background.png')
+const monogramSrc = join(root, 'public', 'lamine-monogram.png')
 
 await sharp(logoSrc)
   .resize({ width: 720, withoutEnlargement: true })
@@ -26,4 +27,25 @@ await sharp(bgSrc)
   .jpeg({ quality: 72, mozjpeg: true })
   .toFile(join(outDir, 'lamine-header.jpg'))
 
-console.log('Assets de PDF gerados em public/pdf/ (logo + header otimizados)')
+// Monograma: remove fundo preto e gera PNG leve com transparência
+{
+  const { data, info } = await sharp(monogramSrc)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true })
+
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i] < 48 && data[i + 1] < 48 && data[i + 2] < 48) {
+      data[i + 3] = 0
+    }
+  }
+
+  await sharp(data, {
+    raw: { width: info.width, height: info.height, channels: 4 },
+  })
+    .resize({ width: 160, withoutEnlargement: true })
+    .png({ compressionLevel: 9 })
+    .toFile(join(outDir, 'lamine-monogram.png'))
+}
+
+console.log('Assets de PDF gerados em public/pdf/ (logo + header + monograma)')

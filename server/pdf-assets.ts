@@ -17,7 +17,7 @@ const MIME_BY_EXT: Record<string, string> = {
   '.svg': 'image/svg+xml',
 }
 
-let cachedBrandAssets: { logoUrl?: string; headerImageUrl?: string } | null = null
+let cachedBrandAssets: { logoUrl?: string; headerImageUrl?: string; monogramUrl?: string } | null = null
 
 function fileToDataUrl(filePath: string): string | undefined {
   if (!existsSync(filePath)) return undefined
@@ -44,10 +44,12 @@ function loadLocalPdfAssetDataUrl(...candidates: string[]): string | undefined {
 /**
  * Assets da marca para o PDF.
  * Preferir public/pdf/* (otimizados) para caber no Render free sem perder o visual.
+ * Monograma e logo precisam ser data: — o Puppeteer aborta imagens remotas.
  */
 export function resolveProposalBrandAssets(): {
   logoUrl?: string
   headerImageUrl?: string
+  monogramUrl?: string
 } {
   if (cachedBrandAssets) return cachedBrandAssets
 
@@ -61,6 +63,10 @@ export function resolveProposalBrandAssets(): {
       'pdf/lamine-header.jpg',
       'lamine-background.png',
       'login/slide-1.svg',
+    ),
+    monogramUrl: loadLocalPdfAssetDataUrl(
+      'pdf/lamine-monogram.png',
+      'lamine-monogram.png',
     ),
   }
 

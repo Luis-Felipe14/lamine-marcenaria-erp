@@ -169,6 +169,7 @@ async function generateBudgetPdfBufferOnce(
   const brandAssets = resolveProposalBrandAssets()
   if (brandAssets.logoUrl) data.company.logoUrl = brandAssets.logoUrl
   if (brandAssets.headerImageUrl) data.company.headerImageUrl = brandAssets.headerImageUrl
+  if (brandAssets.monogramUrl) data.company.monogramUrl = brandAssets.monogramUrl
 
   await embedProposalRemoteImages(data)
 
