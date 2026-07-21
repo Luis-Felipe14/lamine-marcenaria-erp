@@ -167,7 +167,14 @@ function paymentMethodRules(method: string): Partial<Record<FinancialFieldKey, O
     case 'boleto':
       return {
         document_number: { visible: true, required: true, label: 'Nº boleto / NF', section: 'payment', placeholder: 'Linha digitável ou número da NF' },
-        due_date: { visible: true, required: true, label: 'Vencimento', section: 'core' },
+        due_date: { visible: true, required: true, label: '1º vencimento', section: 'core', hint: 'Se houver mais de 1 parcela, as demais repetem o dia nos meses seguintes' },
+        installment_total: {
+          visible: true,
+          required: false,
+          label: 'Quantidade de parcelas',
+          section: 'payment',
+          hint: '2 ou mais gera o cronograma automático (1 lançamento com parcelas mensais)',
+        },
         notes: { visible: true, required: false, placeholder: 'Banco emissor, beneficiário...', section: 'notes' },
       }
     case 'pix':
@@ -282,6 +289,30 @@ export function getFinancialFormFields(
     }
   }
 
+  // Despesa em boleto parcelado: quantidade obrigatória se informada ≥ 2 (campo opcional, mas valida mínimo)
+  if (form.type === 'despesa' && form.payment_method === 'boleto' && form.category !== 'maquinario') {
+    fields.installment_total = {
+      ...fields.installment_total,
+      visible: true,
+      required: false,
+      label: 'Quantidade de parcelas',
+      section: 'payment',
+      hint: 'Deixe 1 ou vazio para boleto único; 2+ gera parcelas mensais a partir do 1º vencimento',
+    }
+    fields.amount = {
+      ...fields.amount,
+      label: Number(form.installment_total) >= 2 ? 'Valor total do boleto' : fields.amount.label,
+    }
+    if (Number(form.installment_total) >= 2) {
+      fields.due_date = {
+        ...fields.due_date,
+        label: '1º vencimento',
+        hint: 'Dia base — as demais parcelas repetem o dia nos meses seguintes',
+        required: true,
+      }
+    }
+  }
+
   if (form.type === 'receita' && form.category === 'pedido' && form.payment_method === 'cartao') {
     fields.installment_total = { ...fields.installment_total, visible: true, required: true }
   }
@@ -387,7 +418,27 @@ export function validateFinancialForm(
     }
   }
 
+  if (isBoletoInstallmentPlan(form)) {
+    if (!form.due_date) {
+      return 'Informe a data do primeiro vencimento do boleto'
+    }
+  }
+
   return null
+}
+
+/** Maquinário ou despesa em boleto com 2+ parcelas → cronograma interno */
+export function isInstallmentPlanExpense(form: FinancialFormState): boolean {
+  if (form.type !== 'despesa') return false
+  if (form.category === 'maquinario') return true
+  return isBoletoInstallmentPlan(form)
+}
+
+function isBoletoInstallmentPlan(form: FinancialFormState): boolean {
+  if (form.type !== 'despesa' || form.payment_method !== 'boleto') return false
+  if (form.category === 'maquinario') return false
+  const total = form.installment_total === '' ? 0 : Number(form.installment_total)
+  return total >= 2
 }
 
 export function sanitizeFinancialPayload(
@@ -399,7 +450,7 @@ export function sanitizeFinancialPayload(
     ? employeeName.trim()
     : form.description.trim()
 
-  const isMaquinarioPlan = form.type === 'despesa' && form.category === 'maquinario'
+  const asInstallmentPlan = isInstallmentPlanExpense(form)
   const installmentTotal = fields.installment_total.visible && form.installment_total !== ''
     ? Number(form.installment_total)
     : null
@@ -419,14 +470,14 @@ export function sanitizeFinancialPayload(
     employee_id: fields.employee_id.visible && form.employee_id ? form.employee_id : null,
     document_number: fields.document_number.visible ? (form.document_number.trim() || null) : null,
     installment_number: null,
-    installment_total: isMaquinarioPlan ? installmentTotal : (
+    installment_total: asInstallmentPlan ? installmentTotal : (
       fields.installment_total.visible && form.installment_total !== ''
         ? Number(form.installment_total)
         : null
     ),
     cash_destination: form.type === 'receita' ? form.cash_destination : 'empresa',
-    is_installment_plan: isMaquinarioPlan,
-    plan_total_amount: isMaquinarioPlan ? (Number(form.amount) || 0) : null,
+    is_installment_plan: asInstallmentPlan,
+    plan_total_amount: asInstallmentPlan ? (Number(form.amount) || 0) : null,
   }
 }
 

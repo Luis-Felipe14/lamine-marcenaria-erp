@@ -20,6 +20,44 @@ function resolveAbsoluteUrl(path: string, baseUrl: string): string {
   return `${base}${path.startsWith('/') ? path : `/${path}`}`
 }
 
+/** Remove fundo preto do monograma para aparecer no papel branco do PDF. */
+async function monogramUrlForPdf(path: string, baseUrl: string): Promise<string> {
+  const src = resolveAbsoluteUrl(path, baseUrl)
+  if (typeof document === 'undefined' || typeof Image === 'undefined') return src
+
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.decoding = 'async'
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas')
+        canvas.width = img.naturalWidth || img.width
+        canvas.height = img.naturalHeight || img.height
+        const ctx = canvas.getContext('2d')
+        if (!ctx || !canvas.width || !canvas.height) {
+          resolve(src)
+          return
+        }
+        ctx.drawImage(img, 0, 0)
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+        const pixels = imageData.data
+        for (let i = 0; i < pixels.length; i += 4) {
+          // Preto / quase preto → transparente
+          if (pixels[i] < 48 && pixels[i + 1] < 48 && pixels[i + 2] < 48) {
+            pixels[i + 3] = 0
+          }
+        }
+        ctx.putImageData(imageData, 0, 0)
+        resolve(canvas.toDataURL('image/png'))
+      } catch {
+        resolve(src)
+      }
+    }
+    img.onerror = () => resolve(src)
+    img.src = src
+  })
+}
+
 async function fetchCompanyInfo(supabase: SupabaseClient): Promise<CompanyInfo> {
   const { data } = await supabase.from('settings').select('value').eq('key', 'company').maybeSingle()
   const value = data?.value as Partial<CompanyInfo> | undefined
@@ -144,6 +182,8 @@ export async function loadBudgetProposalData(
     proposal_detail_mode?: string | null
   }
 
+  const monogramUrl = await monogramUrlForPdf(APP_MONOGRAM.primary, baseUrl)
+
   return {
     templateId: parseTemplateId(budgetRow.proposal_template),
     detailMode: parseDetailMode(budgetRow.proposal_detail_mode),
@@ -154,7 +194,7 @@ export async function loadBudgetProposalData(
       email: company.email,
       address: company.address,
       logoUrl: resolveAbsoluteUrl(APP_LOGO.primary, baseUrl),
-      monogramUrl: resolveAbsoluteUrl(APP_MONOGRAM.primary, baseUrl),
+      monogramUrl,
       headerImageUrl: resolveAbsoluteUrl(APP_BACKGROUND.optionalPhoto, baseUrl),
     },
     budget: {

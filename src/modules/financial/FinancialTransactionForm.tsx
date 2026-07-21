@@ -367,6 +367,11 @@ export function FinancialTransactionForm({
                 text={`${form.installment_total}x de ${formatCurrency(Math.floor((form.amount * 100) / Number(form.installment_total)) / 100)} (última parcela ajusta centavos)`}
               />
             )}
+            {form.type === 'despesa' && form.payment_method === 'boleto' && form.category !== 'maquinario' && form.amount > 0 && Number(form.installment_total) >= 2 && (
+              <FieldHint
+                text={`${form.installment_total}x de ${formatCurrency(Math.floor((form.amount * 100) / Number(form.installment_total)) / 100)} — gera cronograma mensal a partir do 1º vencimento`}
+              />
+            )}
           </div>
           {fields.due_date.visible && (
             <div>

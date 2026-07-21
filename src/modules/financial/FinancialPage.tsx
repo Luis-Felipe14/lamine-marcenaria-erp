@@ -20,6 +20,7 @@ import {
 import {
   createEmptyFinancialForm,
   getFinancialFormFields,
+  isInstallmentPlanExpense,
   sanitizeFinancialPayload,
   validateFinancialForm,
   type FinancialFormState,
@@ -180,9 +181,13 @@ export function FinancialPage() {
           await updateRecord('financial_transactions', editing.id, payload)
           toast.success('Lançamento atualizado!')
         }
-      } else if (form.type === 'despesa' && form.category === 'maquinario') {
+      } else if (isInstallmentPlanExpense(form)) {
         await createInstallmentPlanTransaction(payload)
-        toast.success('Maquinário lançado com cronograma de parcelas!')
+        toast.success(
+          form.category === 'maquinario'
+            ? 'Maquinário lançado com cronograma de parcelas!'
+            : 'Boleto lançado com cronograma de parcelas!',
+        )
       } else {
         await createRecord('financial_transactions', { ...payload, is_paid: false })
 
