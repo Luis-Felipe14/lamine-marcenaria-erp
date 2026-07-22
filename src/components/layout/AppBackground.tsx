@@ -8,6 +8,10 @@ const PARTICLE_COLORS = [
   'rgba(168, 152, 120, 0.4)',
 ]
 
+function prefersReducedMotion() {
+  return typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
+
 function AppBackgroundLayers({ photoMode }: { photoMode: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -18,7 +22,17 @@ function AppBackgroundLayers({ photoMode }: { photoMode: boolean }) {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
+    // Desktop autenticado: gradiente estático (sem rAF). Partículas só em telas estreitas.
+    const isDesktop = window.matchMedia('(min-width: 1024px)').matches
+    if (isDesktop || prefersReducedMotion()) {
+      canvas.style.display = 'none'
+      return
+    }
+
     let animationId = 0
+    let lastFrame = 0
+    const targetFps = 24
+    const frameInterval = 1000 / targetFps
     let particles: {
       x: number
       y: number
@@ -30,25 +44,25 @@ function AppBackgroundLayers({ photoMode }: { photoMode: boolean }) {
     }[] = []
 
     function resize() {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2)
+      const dpr = Math.min(window.devicePixelRatio || 1, 1.5)
       canvas!.width = Math.floor(window.innerWidth * dpr)
       canvas!.height = Math.floor(window.innerHeight * dpr)
       ctx!.setTransform(dpr, 0, 0, dpr, 0, 0)
     }
 
     function initParticles() {
-      particles = Array.from({ length: 8 }, () => ({
+      particles = Array.from({ length: 4 }, () => ({
         x: Math.random() * window.innerWidth,
         y: Math.random() * window.innerHeight,
         size: Math.random() * 2 + 1,
-        speedX: (Math.random() - 0.5) * 0.035,
-        speedY: (Math.random() - 0.5) * 0.035,
+        speedX: (Math.random() - 0.5) * 0.03,
+        speedY: (Math.random() - 0.5) * 0.03,
         color: PARTICLE_COLORS[Math.floor(Math.random() * PARTICLE_COLORS.length)],
         opacity: Math.random() * 0.05 + 0.025,
       }))
     }
 
-    function animate() {
+    function drawFrame() {
       ctx!.clearRect(0, 0, window.innerWidth, window.innerHeight)
       particles.forEach((p) => {
         p.x += p.speedX
@@ -66,16 +80,32 @@ function AppBackgroundLayers({ photoMode }: { photoMode: boolean }) {
         ctx!.fill()
         ctx!.restore()
       })
+    }
+
+    function animate(now: number) {
       animationId = requestAnimationFrame(animate)
+      if (document.hidden) return
+      if (now - lastFrame < frameInterval) return
+      lastFrame = now
+      drawFrame()
     }
 
     resize()
     initParticles()
-    animate()
+    animationId = requestAnimationFrame(animate)
 
     const onResize = () => {
+      if (window.matchMedia('(min-width: 1024px)').matches || prefersReducedMotion()) {
+        cancelAnimationFrame(animationId)
+        animationId = 0
+        canvas.style.display = 'none'
+        ctx.clearRect(0, 0, window.innerWidth, window.innerHeight)
+        return
+      }
+      canvas.style.display = ''
       resize()
       initParticles()
+      if (!animationId) animationId = requestAnimationFrame(animate)
     }
     window.addEventListener('resize', onResize)
 
@@ -83,8 +113,8 @@ function AppBackgroundLayers({ photoMode }: { photoMode: boolean }) {
       if (document.hidden) {
         cancelAnimationFrame(animationId)
         animationId = 0
-      } else if (!animationId) {
-        animate()
+      } else if (!animationId && canvas.style.display !== 'none') {
+        animationId = requestAnimationFrame(animate)
       }
     }
     document.addEventListener('visibilitychange', onVisibilityChange)

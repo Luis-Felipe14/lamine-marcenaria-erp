@@ -1,14 +1,17 @@
-import { useEffect } from 'react'
+import { useEffect, lazy, Suspense } from 'react'
 import { useLocation } from 'react-router-dom'
 import { AppBackground } from './AppBackground'
 import { Sidebar } from './Sidebar'
 import { Header } from './Header'
 import { PageTransition } from './PageTransition'
-import { CommandPalette } from '@/components/shared/CommandPalette'
 import { PwaInstallBanner } from '@/components/shared/PwaInstallBanner'
 import { useViewport } from '@/hooks/useViewport'
 import { useUIStore } from '@/stores/uiStore'
 import { cn } from '@/lib/utils'
+
+const CommandPalette = lazy(() =>
+  import('@/components/shared/CommandPalette').then((m) => ({ default: m.CommandPalette })),
+)
 
 export function AppLayout() {
   const sidebarCollapsed = useUIStore((s) => s.sidebarCollapsed)
@@ -45,7 +48,9 @@ export function AppLayout() {
     <>
       <AppBackground />
       <div className="app-shell" data-viewport={tier}>
-        <CommandPalette />
+        <Suspense fallback={null}>
+          <CommandPalette />
+        </Suspense>
         {usesDrawerNav && mobileNavOpen && (
           <button
             type="button"

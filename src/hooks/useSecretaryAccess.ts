@@ -1,5 +1,5 @@
 import { useAuthStore } from '@/stores/authStore'
-import { useSecretaryAccessSettings } from '@/hooks/useQueries'
+import { useSecretaryAccessSettings } from '@/hooks/useShellQueries'
 import {
   canEditFinancialTransactions,
   canViewMonetaryAmounts,

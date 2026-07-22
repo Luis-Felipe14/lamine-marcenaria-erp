@@ -38,15 +38,40 @@ export function parseChecklist(value: unknown): ProductionChecklistItem[] {
 export async function listProductionOrders(): Promise<ProductionOrder[]> {
   const { data, error } = await supabase
     .from('production_orders')
-    .select('*, order:orders(number, client:clients(name))')
+    .select(
+      'id, number, order_id, status, start_date, expected_end_date, actual_end_date, notes, checklist, order:orders(number, client:clients(name))',
+    )
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
 
   throwIfError(error, 'ordens de produção')
-  return (data ?? []).map((row) => ({
-    ...row,
-    checklist: parseChecklist(row.checklist),
-  })) as ProductionOrder[]
+  return (data ?? []).map((row) => {
+    const orderJoined = (Array.isArray(row.order) ? row.order[0] : row.order) as
+      | { number: number; client: { name: string } | { name: string }[] | null }
+      | null
+      | undefined
+
+    let client: { name: string } | undefined
+    if (orderJoined?.client) {
+      const c = Array.isArray(orderJoined.client) ? orderJoined.client[0] : orderJoined.client
+      if (c?.name) client = { name: String(c.name) }
+    }
+
+    return {
+      id: row.id as string,
+      number: row.number as number,
+      order_id: row.order_id as string,
+      status: row.status as string,
+      start_date: row.start_date as string | null,
+      expected_end_date: row.expected_end_date as string | null,
+      actual_end_date: row.actual_end_date as string | null,
+      notes: row.notes as string | null,
+      checklist: parseChecklist(row.checklist),
+      order: orderJoined
+        ? { number: Number(orderJoined.number), client }
+        : undefined,
+    }
+  })
 }
 
 export async function fetchActiveOrderOptions(): Promise<OrderOption[]> {

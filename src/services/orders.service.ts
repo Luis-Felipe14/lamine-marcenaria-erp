@@ -19,12 +19,25 @@ export interface KanbanOrder {
 export async function fetchOrdersKanban(): Promise<KanbanOrder[]> {
   const { data, error } = await supabase
     .from('orders')
-    .select('*, client:clients(name)')
+    .select('id, number, client_id, status, value, deadline, date, notes, client:clients(name)')
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
 
   throwIfError(error, 'pedidos')
-  return (data ?? []) as KanbanOrder[]
+  return (data ?? []).map((row) => {
+    const client = Array.isArray(row.client) ? row.client[0] : row.client
+    return {
+      id: row.id as string,
+      number: row.number as number,
+      client_id: row.client_id as string,
+      status: row.status as string,
+      value: Number(row.value),
+      deadline: row.deadline as string | null,
+      date: row.date as string,
+      notes: row.notes as string | null,
+      client: client ? { name: String((client as { name: string }).name) } : undefined,
+    }
+  })
 }
 
 export type OrderTimelineEventType =

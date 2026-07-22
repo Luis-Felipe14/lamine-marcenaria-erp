@@ -3,7 +3,7 @@ import { Plus, Target, FileText, Package, Factory, DollarSign } from 'lucide-rea
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { hasModuleAccess } from '@/lib/secretary-access'
-import { useSecretaryAccessSettings } from '@/hooks/useQueries'
+import { useSecretaryAccessSettings } from '@/hooks/useShellQueries'
 import { DEFAULT_SECRETARY_ACCESS } from '@/services/secretary-access.service'
 import { useAuthStore } from '@/stores/authStore'
 import type { UserRole } from '@/types'

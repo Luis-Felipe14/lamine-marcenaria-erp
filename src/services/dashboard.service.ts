@@ -7,6 +7,8 @@ import { getInvestmentStats } from '@/services/marketing.service'
 import { getLumberCreditBalance } from '@/services/lumberyard-credit.service'
 import { getArchitectRankings } from '@/services/architects.service'
 import { getFinancialSummary } from '@/services/financial.service'
+import { queryClient } from '@/lib/query-client'
+import { queryKeys } from '@/lib/query-keys'
 
 const ACTIVE_ORDER_STATUSES = ['projeto_desenvolvimento', 'aguardando_material', 'em_producao', 'pronto_entrega', 'em_montagem']
 
@@ -165,7 +167,11 @@ export async function getSidebarBadges(): Promise<SidebarBadges> {
       true
     ),
     supabase.from('orders').select('id', { count: 'exact', head: true }).is('deleted_at', null).lt('deadline', today).in('status', ACTIVE_ORDER_STATUSES),
-    countCriticalStock(),
+    queryClient.fetchQuery({
+      queryKey: queryKeys.criticalStockCount,
+      queryFn: countCriticalStock,
+      staleTime: 120_000,
+    }),
     countQuery('internal_requests', (q) => q.in('status', ['aberta', 'em_andamento']).is('deleted_at', null), true),
   ])
 
@@ -331,14 +337,24 @@ export interface GlobalHeaderMetrics {
 }
 
 export async function getGlobalHeaderMetrics(): Promise<GlobalHeaderMetrics> {
-  // Receita / A receber: mesmos totais do resumo do Financeiro (não só o mês corrente)
+  // Receita / A receber / estoque crítico: mesmas queryKeys do Financeiro e do badge de estoque
   const [summary, activeOrders, criticalStock] = await Promise.all([
-    getFinancialSummary().catch((err) => {
-      console.warn('[Dashboard] getFinancialSummary no header:', err)
-      return { receitas: 0, despesas: 0, aPagar: 0, aReceber: 0 }
-    }),
+    queryClient
+      .fetchQuery({
+        queryKey: queryKeys.financialSummary,
+        queryFn: getFinancialSummary,
+        staleTime: 120_000,
+      })
+      .catch((err) => {
+        console.warn('[Dashboard] getFinancialSummary no header:', err)
+        return { receitas: 0, despesas: 0, aPagar: 0, aReceber: 0 }
+      }),
     countQuery('orders', (q) => q.in('status', ACTIVE_ORDER_STATUSES).is('deleted_at', null), true),
-    countCriticalStock(),
+    queryClient.fetchQuery({
+      queryKey: queryKeys.criticalStockCount,
+      queryFn: countCriticalStock,
+      staleTime: 120_000,
+    }),
   ])
 
   return {

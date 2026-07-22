@@ -1,19 +1,9 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'sonner'
 import { AppRoutes } from '@/routes'
+import { queryClient } from '@/lib/query-client'
 import { useUIStore } from '@/stores/uiStore'
 import { useEffect } from 'react'
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: 1,
-      staleTime: 60_000,
-      gcTime: 5 * 60_000,
-      refetchOnWindowFocus: false,
-    },
-  },
-})
 
 function App() {
   const theme = useUIStore((s) => s.theme)

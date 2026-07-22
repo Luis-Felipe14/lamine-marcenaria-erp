@@ -35,6 +35,8 @@ export default defineConfig({
           if (id.includes('@tanstack/react-query')) return 'vendor-query'
           if (id.includes('lucide-react')) return 'vendor-icons'
           if (id.includes('date-fns')) return 'vendor-date'
+          if (id.includes('@radix-ui')) return 'vendor-radix'
+          if (id.includes('react-hook-form') || id.includes('@hookform') || id.includes('/zod')) return 'vendor-forms'
           if (id.includes('react-router') || id.includes('/react-dom/') || id.includes('/react/')) return 'vendor-react'
         },
       },

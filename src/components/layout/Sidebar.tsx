@@ -13,7 +13,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { hasPermission } from '@/lib/permissions'
 import { hasPathAccess } from '@/lib/secretary-access'
 import { getAccessibleDashboardSections } from '@/lib/dashboard-access'
-import { useSecretaryAccessSettings, useSidebarBadgesQuery } from '@/hooks/useQueries'
+import { useSecretaryAccessSettings, useSidebarBadgesQuery } from '@/hooks/useShellQueries'
 import { DEFAULT_SECRETARY_ACCESS, type SecretaryAccessSettings } from '@/services/secretary-access.service'
 import type { UserRole } from '@/types'
 import type { LucideIcon } from 'lucide-react'
@@ -160,7 +160,10 @@ function NavItemLink({
 }
 
 export function Sidebar() {
-  const { sidebarCollapsed, toggleSidebar, mobileNavOpen, setMobileNavOpen } = useUIStore()
+  const sidebarCollapsed = useUIStore((s) => s.sidebarCollapsed)
+  const toggleSidebar = useUIStore((s) => s.toggleSidebar)
+  const mobileNavOpen = useUIStore((s) => s.mobileNavOpen)
+  const setMobileNavOpen = useUIStore((s) => s.setMobileNavOpen)
   const { usesDrawerNav } = useViewport()
   const role = useAuthStore((s) => s.profile?.role?.name) as UserRole | undefined
   const { signOut } = useAuth()

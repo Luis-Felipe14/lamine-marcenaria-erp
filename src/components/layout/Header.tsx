@@ -12,13 +12,18 @@ import { useAuth } from '@/hooks/useAuth'
 import { useBreadcrumb } from '@/hooks/useBreadcrumb'
 import { useHeaderHeightSync } from '@/hooks/useHeaderHeightSync'
 import { useViewport } from '@/hooks/useViewport'
-import { useHeaderMetrics, useNotifications } from '@/hooks/useQueries'
+import { useHeaderMetrics, useNotifications } from '@/hooks/useShellQueries'
 import { useSecretaryAccess } from '@/hooks/useSecretaryAccess'
 import { cn, formatCurrency } from '@/lib/utils'
 import { formatCurrencyMasked } from '@/lib/secretary-access'
 
 export function Header() {
-  const { sidebarCollapsed, theme, toggleTheme, setHeaderKpisVisible, setCommandPaletteOpen, toggleMobileNav } = useUIStore()
+  const sidebarCollapsed = useUIStore((s) => s.sidebarCollapsed)
+  const theme = useUIStore((s) => s.theme)
+  const toggleTheme = useUIStore((s) => s.toggleTheme)
+  const setHeaderKpisVisible = useUIStore((s) => s.setHeaderKpisVisible)
+  const setCommandPaletteOpen = useUIStore((s) => s.setCommandPaletteOpen)
+  const toggleMobileNav = useUIStore((s) => s.toggleMobileNav)
   const { isPhone, isTablet } = useViewport()
   const headerRef = useRef<HTMLElement>(null)
   useHeaderHeightSync(headerRef)
@@ -31,11 +36,11 @@ export function Header() {
   const [showNotif, setShowNotif] = useState(false)
   const notifRef = useRef<HTMLDivElement>(null)
 
+  const isDashboardRoute = location.pathname === '/' || location.pathname.startsWith('/dashboard')
   const { data: notifications = [] } = useNotifications(userId)
-  const { data: kpis, isLoading: kpisLoading } = useHeaderMetrics()
+  const { data: kpis, isLoading: kpisLoading } = useHeaderMetrics({ enabled: !isDashboardRoute })
   const { canViewAmounts } = useSecretaryAccess()
 
-  const isDashboardRoute = location.pathname === '/' || location.pathname.startsWith('/dashboard')
   const showHeaderKpis = Boolean(kpis) && !kpisLoading && !isDashboardRoute
 
   useEffect(() => {

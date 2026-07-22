@@ -20,17 +20,15 @@ async function clearBlockedSession(
 
 export function useAuth() {
   const signInInProgress = useRef(false)
-  const {
-    user,
-    profile,
-    loading,
-    billingBlockMessage,
-    setUser,
-    setProfile,
-    setLoading,
-    setBillingBlockMessage,
-    reset,
-  } = useAuthStore()
+  const user = useAuthStore((s) => s.user)
+  const profile = useAuthStore((s) => s.profile)
+  const loading = useAuthStore((s) => s.loading)
+  const billingBlockMessage = useAuthStore((s) => s.billingBlockMessage)
+  const setUser = useAuthStore((s) => s.setUser)
+  const setProfile = useAuthStore((s) => s.setProfile)
+  const setLoading = useAuthStore((s) => s.setLoading)
+  const setBillingBlockMessage = useAuthStore((s) => s.setBillingBlockMessage)
+  const reset = useAuthStore((s) => s.reset)
 
   useEffect(() => {
     let mounted = true

@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { Activity, Target, Package, FileText, Users, Factory } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useRecentActivities } from '@/hooks/useQueries'
+import { useRecentActivities } from '@/hooks/useShellQueries'
 import { formatRelativeDate } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 

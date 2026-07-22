@@ -5,19 +5,13 @@ import { queryKeys } from '@/lib/query-keys'
 import { useAuthStore } from '@/stores/authStore'
 import { DEFAULT_SECRETARY_ACCESS } from '@/services/secretary-access.service'
 import {
-  countCriticalStock,
   getExecutiveMetrics,
   getFinancialChart,
   getCommercialMetrics,
   getOperationalMetrics,
   getFinancialDashboardMetrics,
-  getGlobalHeaderMetrics,
-  getSidebarBadges,
-  getRecentActivities,
-  getNotifications,
 } from '@/services/dashboard.service'
 import { getFinancialSummary, getFinancialSettings, listFinancialTransactions } from '@/services/financial.service'
-import { getSecretaryAccessSettings } from '@/services/secretary-access.service'
 import {
   computeLumberCreditStats,
   getLumberCreditSettings,
@@ -49,6 +43,16 @@ import { listLowStockMaterials } from '@/services/inventory.service'
 import { fetchPayrollMonthData } from '@/services/payroll.service'
 import { listBudgetsPaginated, getBudgetProposalDefaults } from '@/services/budgets.service'
 import type { Database } from '@/types/database'
+import { useSecretaryAccessSettings } from '@/hooks/useShellQueries'
+
+export {
+  useHeaderMetrics,
+  useSidebarBadgesQuery,
+  useRecentActivities,
+  useNotifications,
+  useSecretaryAccessSettings,
+  useCriticalStockCount,
+} from '@/hooks/useShellQueries'
 
 type Client = Database['public']['Tables']['clients']['Row']
 
@@ -101,38 +105,6 @@ export function useFinancialDashboardMetrics() {
   })
 }
 
-export function useHeaderMetrics() {
-  return useQuery({
-    queryKey: queryKeys.headerMetrics,
-    queryFn: getGlobalHeaderMetrics,
-    staleTime: 120_000,
-  })
-}
-
-export function useSidebarBadgesQuery() {
-  return useQuery({
-    queryKey: queryKeys.sidebarBadges,
-    queryFn: getSidebarBadges,
-    refetchInterval: 120_000,
-  })
-}
-
-export function useRecentActivities(limit = 8) {
-  return useQuery({
-    queryKey: queryKeys.recentActivities(limit),
-    queryFn: () => getRecentActivities(limit),
-    staleTime: 60_000,
-  })
-}
-
-export function useNotifications(userId: string | undefined) {
-  return useQuery({
-    queryKey: queryKeys.notifications(userId ?? ''),
-    queryFn: () => getNotifications(userId!),
-    enabled: Boolean(userId),
-  })
-}
-
 export function useFinancialSummary() {
   return useQuery({
     queryKey: queryKeys.financialSummary,
@@ -145,22 +117,6 @@ export function useFinancialSettings() {
   return useQuery({
     queryKey: queryKeys.financialSettings,
     queryFn: getFinancialSettings,
-    staleTime: 60_000,
-  })
-}
-
-export function useSecretaryAccessSettings() {
-  return useQuery({
-    queryKey: queryKeys.secretaryAccess,
-    queryFn: getSecretaryAccessSettings,
-    staleTime: 60_000,
-  })
-}
-
-export function useCriticalStockCount() {
-  return useQuery({
-    queryKey: queryKeys.criticalStockCount,
-    queryFn: countCriticalStock,
     staleTime: 60_000,
   })
 }

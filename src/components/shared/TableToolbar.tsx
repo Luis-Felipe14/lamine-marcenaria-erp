@@ -24,7 +24,8 @@ export function TableToolbar({
   panel = false,
   zoneLabel = 'Filtros e busca',
 }: TableToolbarProps) {
-  const { tableDensity, setTableDensity } = useUIStore()
+  const tableDensity = useUIStore((s) => s.tableDensity)
+  const setTableDensity = useUIStore((s) => s.setTableDensity)
 
   const toolbar = (
     <div className={cn('flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between', className)}>
