@@ -12,9 +12,9 @@ import { useSecretaryAccess } from '@/hooks/useSecretaryAccess'
 export function OperationalDashboard() {
   const { data, isLoading } = useOperationalMetrics()
   const role = useAuthStore((s) => s.profile?.role?.name)
-  const { settings, canViewAmounts } = useSecretaryAccess()
+  const { settings, canViewLumberCreditAmounts } = useSecretaryAccess()
   const canSeeLumberCredit = hasModuleAccess(role, 'lumber_credit.read', settings)
-  const money = (value: number) => formatCurrencyMasked(value, canViewAmounts, formatCurrency)
+  const money = (value: number) => formatCurrencyMasked(value, canViewLumberCreditAmounts, formatCurrency)
 
   return (
     <div className="space-y-4 md:space-y-6">

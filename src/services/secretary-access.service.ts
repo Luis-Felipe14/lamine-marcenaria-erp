@@ -38,6 +38,8 @@ export interface SecretaryAccessSettings {
   can_view_amounts: boolean
   /** Subliberação: criar/editar/excluir lançamentos no Financeiro */
   can_edit_financial: boolean
+  /** Subliberação: ver valores no Crédito Madeireira (independente de can_view_amounts) */
+  can_view_lumber_credit_amounts: boolean
   /** Subliberações das abas do Dashboard Geral */
   dashboard_sections: Record<DashboardSectionKey, boolean>
 }
@@ -103,6 +105,7 @@ export const DEFAULT_SECRETARY_ACCESS: SecretaryAccessSettings = {
   modules: { ...DEFAULT_SECRETARY_MODULES },
   can_view_amounts: false,
   can_edit_financial: false,
+  can_view_lumber_credit_amounts: false,
   dashboard_sections: { ...DEFAULT_DASHBOARD_SECTIONS },
 }
 
@@ -174,6 +177,8 @@ export async function getSecretaryAccessSettings(): Promise<SecretaryAccessSetti
     modules: mergeModules(value?.modules),
     can_view_amounts: canViewAmounts ?? false,
     can_edit_financial: value?.can_edit_financial ?? DEFAULT_SECRETARY_ACCESS.can_edit_financial,
+    can_view_lumber_credit_amounts:
+      value?.can_view_lumber_credit_amounts ?? DEFAULT_SECRETARY_ACCESS.can_view_lumber_credit_amounts,
     dashboard_sections: mergeDashboardSections(value?.dashboard_sections),
   }
 }
@@ -185,6 +190,7 @@ export async function saveSecretaryAccessSettings(settings: SecretaryAccessSetti
       modules: mergeModules(settings.modules),
       can_view_amounts: Boolean(settings.can_view_amounts),
       can_edit_financial: Boolean(settings.can_edit_financial),
+      can_view_lumber_credit_amounts: Boolean(settings.can_view_lumber_credit_amounts),
       dashboard_sections: mergeDashboardSections(settings.dashboard_sections),
     } satisfies SecretaryAccessSettings,
   }

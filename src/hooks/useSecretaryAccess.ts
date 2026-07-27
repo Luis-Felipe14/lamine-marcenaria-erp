@@ -2,6 +2,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useSecretaryAccessSettings } from '@/hooks/useShellQueries'
 import {
   canEditFinancialTransactions,
+  canViewLumberCreditAmounts,
   canViewMonetaryAmounts,
   hasModuleAccess,
   hasPathAccess,
@@ -19,6 +20,7 @@ export function useSecretaryAccess() {
     settings: access,
     isLoading,
     canViewAmounts: canViewMonetaryAmounts(role, access),
+    canViewLumberCreditAmounts: canViewLumberCreditAmounts(role, access),
     canEditFinancial: canEditFinancialTransactions(role, access),
     canAccessPermission: (permission: string) => hasModuleAccess(role, permission, access),
     canAccessPath: (path: string) => hasPathAccess(role, path, access),

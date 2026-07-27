@@ -452,7 +452,7 @@ export function SettingsPage() {
                     </Label>
                     <p className="mt-0.5 text-xs text-gray-500">
                       {secretaryAccess.can_view_amounts
-                        ? 'ON — vê valores em pedidos, financeiro, crédito madeireira e KPIs'
+                        ? 'ON — vê valores em pedidos, financeiro e KPIs (crédito madeireira tem liberação própria)'
                         : 'OFF — acessa as telas, mas valores ficam ocultos (•••)'}
                     </p>
                   </div>
@@ -482,6 +482,12 @@ export function SettingsPage() {
                             setSecretaryModule(key, v)
                             if (key === 'financeiro' && !v) {
                               setSecretaryAccess((prev) => ({ ...prev, can_edit_financial: false }))
+                            }
+                            if (key === 'credito_madereira' && !v) {
+                              setSecretaryAccess((prev) => ({
+                                ...prev,
+                                can_view_lumber_credit_amounts: false,
+                              }))
                             }
                           }}
                           aria-label={SECRETARY_MODULE_LABELS[key]}
@@ -530,6 +536,34 @@ export function SettingsPage() {
                               setSecretaryAccess((prev) => ({ ...prev, can_edit_financial: v }))
                             }
                             aria-label="Permitir secretária editar lançamentos financeiros"
+                          />
+                        </div>
+                      )}
+                      {key === 'credito_madereira' && secretaryAccess.modules.credito_madereira && (
+                        <div className="ml-4 flex items-center justify-between gap-4 rounded-lg border border-border/40 bg-surface-elevated/70 px-4 py-3">
+                          <div className="min-w-0 flex-1">
+                            <Label
+                              htmlFor="secretary-view-lumber-amounts"
+                              className="text-sm text-white light:text-gray-900"
+                            >
+                              Ver valores monetários
+                            </Label>
+                            <p className="mt-0.5 text-xs text-gray-500">
+                              {secretaryAccess.can_view_lumber_credit_amounts
+                                ? 'ON — vê saldos, totais e valores dos movimentos'
+                                : 'OFF — acessa a tela, mas valores ficam ocultos (•••)'}
+                            </p>
+                          </div>
+                          <Switch
+                            id="secretary-view-lumber-amounts"
+                            checked={secretaryAccess.can_view_lumber_credit_amounts}
+                            onCheckedChange={(v) =>
+                              setSecretaryAccess((prev) => ({
+                                ...prev,
+                                can_view_lumber_credit_amounts: v,
+                              }))
+                            }
+                            aria-label="Permitir secretária ver valores do crédito madeireira"
                           />
                         </div>
                       )}

@@ -189,7 +189,7 @@ export function hasPathAccess(
   return hasPermission(role, representative[moduleKey])
 }
 
-/** Gestor sempre vê valores; secretária só com can_view_amounts. */
+/** Gestor sempre vê valores; secretária só com can_view_amounts (exceto crédito madeireira). */
 export function canViewMonetaryAmounts(
   role: string | undefined,
   settings: SecretaryAccessSettings | undefined | null,
@@ -201,6 +201,27 @@ export function canViewMonetaryAmounts(
     return Boolean(settings?.can_view_amounts ?? DEFAULT_SECRETARY_ACCESS.can_view_amounts)
   }
   return false
+}
+
+/**
+ * Ver valores no Crédito Madeireira.
+ * Independente de can_view_amounts — secretária precisa do módulo + can_view_lumber_credit_amounts.
+ */
+export function canViewLumberCreditAmounts(
+  role: string | undefined,
+  settings: SecretaryAccessSettings | undefined | null,
+): boolean {
+  const normalized = normalizeRole(role)
+  if (!normalized) return false
+  if (normalized === 'gestor') return true
+  if (normalized === 'secretaria') {
+    const modules = settings?.modules ?? DEFAULT_SECRETARY_ACCESS.modules
+    return Boolean(
+      modules.credito_madereira &&
+        (settings?.can_view_lumber_credit_amounts ?? DEFAULT_SECRETARY_ACCESS.can_view_lumber_credit_amounts),
+    )
+  }
+  return hasPermission(role, 'lumber_credit.read') || hasPermission(role, 'lumber_credit.*')
 }
 
 /**

@@ -77,8 +77,8 @@ export function LumberyardCreditPage() {
   const userId = useAuthStore((s) => s.user?.id)
   const role = useAuthStore((s) => s.profile?.role?.name) as UserRole | undefined
   const canWrite = hasPermission(role, 'lumber_credit.*')
-  const { canViewAmounts } = useSecretaryAccess()
-  const money = (value: number) => formatCurrencyMasked(value, canViewAmounts, formatCurrency)
+  const { canViewLumberCreditAmounts } = useSecretaryAccess()
+  const money = (value: number) => formatCurrencyMasked(value, canViewLumberCreditAmounts, formatCurrency)
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<LumberCreditMovement | null>(null)
@@ -321,7 +321,7 @@ export function LumberyardCreditPage() {
         <StatCard
           title="Utilização"
           value={
-            canViewAmounts
+            canViewLumberCreditAmounts
               ? stats.totalEntrada > 0
                 ? `${((stats.totalSaida / stats.totalEntrada) * 100).toFixed(0)}%`
                 : '0%'
