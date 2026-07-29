@@ -37,9 +37,10 @@ import {
   type BudgetEntradaMode,
 } from '@/lib/budget-entrada'
 import { useConfirm } from '@/hooks/useConfirm'
-import { useBudgets, useBudgetProposalDefaults, useLookupClients } from '@/hooks/useQueries'
+import { useBudgets, useBudgetProposalDefaults, useLookupBudgetRecipients } from '@/hooks/useQueries'
 import {
   getBudgetProposalDefaults,
+  resolveBudgetRecipientSelection,
   saveBudgetProposalDefaults,
   type Budget,
   type BudgetProposalDefaults,
@@ -89,6 +90,7 @@ const emptyEnvironment = (name = 'Sala'): BudgetEnvironmentForm => ({
 
 const emptyForm = (defaults?: Partial<BudgetProposalDefaults>) => ({
   client_id: '',
+  linked_lead_id: null as string | null,
   project_name: '',
   measurements: '',
   discount: 0,
@@ -137,7 +139,7 @@ export function BudgetsPage() {
   const { data: listResult, isLoading: loading, isFetching } = useBudgets(page)
   const budgets = listResult?.data ?? []
   const totalPages = listResult?.totalPages ?? 1
-  const { data: clients = [] } = useLookupClients()
+  const { data: recipients = [] } = useLookupBudgetRecipients()
   const { data: proposalDefaults = FALLBACK_BUDGET_PROPOSAL_DEFAULTS } = useBudgetProposalDefaults()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<Budget | null>(null)
@@ -166,11 +168,37 @@ export function BudgetsPage() {
   }, [queryClient, proposalDefaults])
 
   useEffect(() => {
-    if (searchParams.get('lead')) {
-      void applyNewBudgetForm()
-      setDialogOpen(true)
-    }
-  }, [searchParams, applyNewBudgetForm])
+    const leadId = searchParams.get('lead')
+    if (!leadId) return
+
+    void (async () => {
+      try {
+        const defaults = await queryClient.fetchQuery({
+          queryKey: queryKeys.budgetProposalDefaults,
+          queryFn: getBudgetProposalDefaults,
+        })
+        setEditing(null)
+
+        const { data: lead } = await supabase
+          .from('leads')
+          .select('id, client_id')
+          .eq('id', leadId)
+          .is('deleted_at', null)
+          .maybeSingle()
+
+        setForm({
+          ...emptyForm(defaults),
+          client_id: lead?.client_id ?? `lead:${leadId}`,
+          linked_lead_id: leadId,
+        })
+        setDialogOpen(true)
+      } catch {
+        setForm(emptyForm(proposalDefaults))
+        setForm((prev) => ({ ...prev, client_id: `lead:${leadId}`, linked_lead_id: leadId }))
+        setDialogOpen(true)
+      }
+    })()
+  }, [searchParams, queryClient, proposalDefaults])
 
   const calculateTotal = () => projectSellingTotal(form.environments) - form.discount
 
@@ -274,6 +302,7 @@ export function BudgetsPage() {
       const entradaPercent = clampEntradaPercent(Number(row.entrada_percent ?? DEFAULT_ENTRADA_PERCENT))
       setForm({
         client_id: row.client_id,
+        linked_lead_id: null,
         project_name: row.project_name,
         measurements: row.measurements ?? '',
         discount: row.discount ?? 0,
@@ -404,8 +433,18 @@ export function BudgetsPage() {
       const entradaMode = form.entrada_mode
       const entradaPercent = clampEntradaPercent(form.entrada_percent)
       const entradaValue = Math.max(0, Number(form.entrada_value) || 0)
+
+      let client_id = form.client_id
+      let lead_id: string | null = null
+
+      if (!editing) {
+        const resolved = await resolveBudgetRecipientSelection(form.client_id)
+        client_id = resolved.client_id
+        lead_id = resolved.lead_id ?? form.linked_lead_id
+      }
+
       const payload = {
-        client_id: form.client_id,
+        client_id,
         project_name: form.project_name.trim(),
         environment: primaryEnvironment,
         measurements: form.measurements.trim() || null,
@@ -442,11 +481,14 @@ export function BudgetsPage() {
       } else {
         const budget = await createRecord('budgets', {
           ...payload,
-          lead_id: searchParams.get('lead') || null,
+          lead_id,
           status: 'em_analise',
         })
         await saveBudgetEnvironments((budget as { id: string }).id)
         toast.success('Orçamento criado!')
+        await queryClient.invalidateQueries({ queryKey: queryKeys.lookupBudgetRecipients })
+        await queryClient.invalidateQueries({ queryKey: queryKeys.lookupClients })
+        await queryClient.invalidateQueries({ queryKey: queryKeys.crmLeads })
       }
 
       await saveBudgetProposalDefaults({
@@ -572,9 +614,24 @@ export function BudgetsPage() {
               <div className="space-y-4">
                 <div>
                   <Label>Cliente</Label>
-                  <Select value={form.client_id} onValueChange={(v) => setForm({ ...form, client_id: v })}>
+                  <Select
+                    value={form.client_id}
+                    onValueChange={(v) =>
+                      setForm({
+                        ...form,
+                        client_id: v,
+                        linked_lead_id: v.startsWith('lead:') ? v.slice(5) : null,
+                      })
+                    }
+                  >
                     <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                    <SelectContent>{clients.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+                    <SelectContent>
+                      {recipients.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.kind === 'lead' ? `${option.name} (Lead)` : option.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
                   </Select>
                 </div>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

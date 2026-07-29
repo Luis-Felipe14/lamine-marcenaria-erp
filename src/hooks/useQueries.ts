@@ -22,6 +22,7 @@ import {
 } from '@/services/lumberyard-credit.service'
 import {
   fetchClientOptions,
+  fetchBudgetRecipientOptions,
   fetchMaterialOptions,
   fetchOrderOptions,
   fetchPurchaseOptions,
@@ -188,6 +189,14 @@ export function useClients(page: number, search: string) {
 
 export function useLookupClients() {
   return useQuery({ queryKey: queryKeys.lookupClients, queryFn: fetchClientOptions, staleTime: 120_000 })
+}
+
+export function useLookupBudgetRecipients() {
+  return useQuery({
+    queryKey: queryKeys.lookupBudgetRecipients,
+    queryFn: fetchBudgetRecipientOptions,
+    staleTime: 120_000,
+  })
 }
 
 export function useLookupOrders() {

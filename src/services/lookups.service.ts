@@ -11,6 +11,42 @@ export async function fetchClientOptions() {
   return data ?? []
 }
 
+export interface BudgetRecipientOption {
+  value: string
+  name: string
+  kind: 'client' | 'lead'
+}
+
+/** Clientes + leads ainda sem cadastro de cliente (para orçamentos). */
+export async function fetchBudgetRecipientOptions(): Promise<BudgetRecipientOption[]> {
+  const [clientsRes, leadsRes] = await Promise.all([
+    supabase.from('clients').select('id, name').is('deleted_at', null).order('name'),
+    supabase
+      .from('leads')
+      .select('id, name')
+      .is('deleted_at', null)
+      .is('client_id', null)
+      .order('name'),
+  ])
+
+  throwIfError(clientsRes.error, 'clientes')
+  throwIfError(leadsRes.error, 'leads')
+
+  const clients: BudgetRecipientOption[] = (clientsRes.data ?? []).map((c) => ({
+    value: c.id,
+    name: c.name,
+    kind: 'client',
+  }))
+
+  const leads: BudgetRecipientOption[] = (leadsRes.data ?? []).map((l) => ({
+    value: `lead:${l.id}`,
+    name: l.name,
+    kind: 'lead',
+  }))
+
+  return [...clients, ...leads].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
+}
+
 export async function fetchOrderOptions() {
   const { data, error } = await supabase
     .from('orders')

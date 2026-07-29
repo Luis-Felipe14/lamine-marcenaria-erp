@@ -21,6 +21,7 @@ export const queryKeys = {
     ['lumber-credit', 'movements', filters, page] as const,
   clients: (page: number, search: string) => ['clients', page, search] as const,
   lookupClients: ['lookups', 'clients'] as const,
+  lookupBudgetRecipients: ['lookups', 'budget-recipients'] as const,
   lookupOrders: ['lookups', 'orders'] as const,
   lookupSuppliers: ['lookups', 'suppliers'] as const,
   lookupArchitects: ['lookups', 'architects'] as const,

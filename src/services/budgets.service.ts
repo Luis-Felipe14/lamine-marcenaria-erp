@@ -1,5 +1,5 @@
 import { PAGE_SIZE } from '@/lib/constants'
-import { paginatedQuery } from '@/services/api'
+import { paginatedQuery, createRecord, updateRecord } from '@/services/api'
 import { supabase } from '@/lib/supabase'
 import { throwIfError } from '@/lib/supabase-helpers'
 import {
@@ -84,4 +84,47 @@ export async function saveBudgetProposalDefaults(defaults: BudgetProposalDefault
     : await supabase.from('settings').insert(payload)
 
   throwIfError(error, 'salvar padrões do orçamento')
+}
+
+const LEAD_RECIPIENT_PREFIX = 'lead:'
+
+export function isLeadRecipientSelection(value: string): boolean {
+  return value.startsWith(LEAD_RECIPIENT_PREFIX)
+}
+
+/** Converte seleção do formulário (cliente ou lead) em client_id + lead_id para o orçamento. */
+export async function resolveBudgetRecipientSelection(
+  selection: string,
+): Promise<{ client_id: string; lead_id: string | null }> {
+  if (isLeadRecipientSelection(selection)) {
+    const leadId = selection.slice(LEAD_RECIPIENT_PREFIX.length)
+    const { data: lead, error } = await supabase
+      .from('leads')
+      .select('id, name, phone, whatsapp, email, architect_id, client_id')
+      .eq('id', leadId)
+      .is('deleted_at', null)
+      .maybeSingle()
+
+    throwIfError(error, 'lead')
+    if (!lead) throw new Error('Lead não encontrado')
+
+    if (lead.client_id) {
+      return { client_id: lead.client_id, lead_id: lead.id }
+    }
+
+    const client = await createRecord('clients', {
+      name: lead.name,
+      phone: lead.phone,
+      whatsapp: lead.whatsapp,
+      email: lead.email,
+      architect_id: lead.architect_id ?? null,
+    })
+
+    const clientId = (client as { id: string }).id
+    await updateRecord('leads', lead.id, { client_id: clientId })
+
+    return { client_id: clientId, lead_id: lead.id }
+  }
+
+  return { client_id: selection, lead_id: null }
 }
