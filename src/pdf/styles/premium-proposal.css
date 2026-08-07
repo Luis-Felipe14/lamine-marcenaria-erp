@@ -79,7 +79,7 @@ html, body {
 
 .proposal-hero__title {
   margin: 0 0 3mm;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -90,7 +90,7 @@ html, body {
 .proposal-hero__tagline {
   margin: 0;
   max-width: 110mm;
-  font-size: 7.5px;
+  font-size: 10.5px;
   line-height: 1.55;
   font-weight: 400;
   color: rgba(255, 255, 255, 0.72);
@@ -117,7 +117,7 @@ html, body {
 
 .proposal-meta-bar__label {
   display: block;
-  font-size: 6px;
+  font-size: 8px;
   font-weight: 600;
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -127,7 +127,7 @@ html, body {
 
 .proposal-meta-bar__value {
   display: block;
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--proposal-ink);
   line-height: 1.3;
@@ -136,7 +136,7 @@ html, body {
 .proposal-meta-bar__detail {
   display: block;
   margin-top: 1mm;
-  font-size: 6.5px;
+  font-size: 9.5px;
   font-weight: 500;
   line-height: 1.35;
   color: var(--proposal-muted);
@@ -223,7 +223,7 @@ html, body {
 
 .proposal-env__name {
   margin: 0;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -232,7 +232,7 @@ html, body {
 
 .proposal-env__description {
   margin: 0 0 2mm;
-  font-size: 7px;
+  font-size: 10.5px;
   line-height: 1.5;
   color: var(--proposal-muted);
   white-space: pre-wrap;
@@ -253,7 +253,7 @@ html, body {
   display: flex;
   align-items: flex-start;
   gap: 2mm;
-  font-size: 7.5px;
+  font-size: 11px;
   line-height: 1.45;
   color: var(--proposal-ink);
   padding: 1mm 0;
@@ -271,7 +271,7 @@ html, body {
 
 .proposal-checklist__value {
   flex-shrink: 0;
-  font-size: 7.5px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--proposal-gold-dark, #8a7358);
   white-space: nowrap;
@@ -279,12 +279,12 @@ html, body {
 
 .proposal-checklist__mark {
   flex-shrink: 0;
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   background: rgba(184, 149, 111, 0.15);
   color: var(--proposal-gold-dark, #8a7358);
-  font-size: 7px;
+  font-size: 9px;
   font-weight: 700;
   display: inline-flex;
   align-items: center;
@@ -300,12 +300,12 @@ html, body {
 .proposal-checklist__mark--muted {
   background: rgba(255, 255, 255, 0.08);
   color: rgba(255, 255, 255, 0.45);
-  font-size: 6px;
+  font-size: 8px;
 }
 
 .proposal-checklist--light li {
   color: rgba(255, 255, 255, 0.88);
-  font-size: 7px;
+  font-size: 10.5px;
 }
 
 .proposal-env__price-bar {
@@ -316,12 +316,12 @@ html, body {
   padding: 2mm 3mm;
   background: var(--proposal-surface);
   border-radius: 2px;
-  font-size: 7px;
+  font-size: 10.5px;
   color: var(--proposal-muted);
 }
 
 .proposal-env__price-bar strong {
-  font-size: 10px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--proposal-gold);
 }
@@ -339,7 +339,7 @@ html, body {
 
 .proposal-panel__title {
   margin: 0 0 3mm;
-  font-size: 7px;
+  font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -348,7 +348,7 @@ html, body {
 
 .proposal-panel__text {
   margin: 2mm 0 0;
-  font-size: 6.5px;
+  font-size: 10px;
   line-height: 1.55;
   color: rgba(255, 255, 255, 0.65);
   white-space: pre-wrap;
@@ -364,7 +364,7 @@ html, body {
   display: flex;
   justify-content: space-between;
   gap: 2mm;
-  font-size: 7px;
+  font-size: 10.5px;
   padding: 1.5mm 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   color: rgba(255, 255, 255, 0.8);
@@ -379,7 +379,7 @@ html, body {
 .proposal-summary-discount {
   display: flex;
   justify-content: space-between;
-  font-size: 7px;
+  font-size: 10.5px;
   color: rgba(255, 255, 255, 0.65);
   padding: 2mm 0 0;
 }
@@ -393,7 +393,7 @@ html, body {
 
 .proposal-summary-total span {
   display: block;
-  font-size: 6.5px;
+  font-size: 8.5px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: rgba(255, 255, 255, 0.55);
@@ -401,7 +401,7 @@ html, body {
 }
 
 .proposal-summary-total strong {
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--proposal-gold-light);
 }
@@ -421,7 +421,7 @@ html, body {
 
 .proposal-commercial-label {
   display: block;
-  font-size: 6px;
+  font-size: 8px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: rgba(255, 255, 255, 0.5);
@@ -429,7 +429,7 @@ html, body {
 }
 
 .proposal-commercial-grid strong {
-  font-size: 8px;
+  font-size: 10px;
   color: var(--proposal-gold-light);
 }
 
@@ -456,14 +456,14 @@ html, body {
 }
 
 .proposal-timeline-card__icon {
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1;
   opacity: 0.7;
 }
 
 .proposal-timeline-card h3 {
   margin: 0 0 1mm;
-  font-size: 7px;
+  font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -472,7 +472,7 @@ html, body {
 
 .proposal-timeline-card p {
   margin: 0;
-  font-size: 7px;
+  font-size: 10.5px;
   line-height: 1.45;
   color: var(--proposal-muted);
 }
@@ -486,7 +486,7 @@ html, body {
 
 .proposal-observations h3 {
   margin: 0 0 2mm;
-  font-size: 7px;
+  font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -495,7 +495,7 @@ html, body {
 
 .proposal-observations p {
   margin: 0 0 1.5mm;
-  font-size: 7px;
+  font-size: 10.5px;
   line-height: 1.55;
   color: var(--proposal-muted);
   white-space: pre-wrap;
@@ -515,14 +515,14 @@ html, body {
 .proposal-footer__script {
   margin: 0 0 2mm;
   font-family: 'Segoe Script', 'Brush Script MT', 'Palatino Linotype', cursive;
-  font-size: 22px;
+  font-size: 24px;
   color: var(--proposal-gold);
   line-height: 1.2;
 }
 
 .proposal-footer__tagline {
   margin: 0;
-  font-size: 7px;
+  font-size: 10px;
   line-height: 1.5;
   color: var(--proposal-muted);
 }
@@ -547,7 +547,7 @@ html, body {
 
 .proposal-footer__lines p {
   margin: 0 0 1mm;
-  font-size: 7px;
+  font-size: 10px;
   color: var(--proposal-muted);
   line-height: 1.4;
 }
