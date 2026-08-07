@@ -31,6 +31,8 @@ import { invalidateDashboardMetrics } from '@/lib/invalidate-dashboard'
 import { createRecord, updateRecord, softDelete } from '@/services/api'
 import {
   createInstallmentPlanTransaction,
+  convertToInstallmentPlan,
+  ensureInstallmentSchedules,
   listInstallmentSchedules,
   markInstallmentPaid,
   type FinancialInstallmentSchedule,
@@ -131,7 +133,12 @@ export function FinancialPage() {
     setScheduleOpen(true)
     setScheduleLoading(true)
     try {
-      const rows = await listInstallmentSchedules(row.id)
+      let rows = await listInstallmentSchedules(row.id)
+      if (row.is_installment_plan && rows.length === 0) {
+        rows = await ensureInstallmentSchedules(row)
+        toast.success('Cronograma de parcelas recriado automaticamente')
+        await invalidateFinancial()
+      }
       setSchedules(rows)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao carregar parcelas')
@@ -177,8 +184,19 @@ export function FinancialPage() {
             document_number: payload.document_number,
           })
           toast.success('Lançamento atualizado! (cronograma de parcelas preservado)')
+        } else if (isInstallmentPlanExpense(form)) {
+          await convertToInstallmentPlan(editing.id, payload)
+          toast.success(
+            form.category === 'maquinario'
+              ? 'Lançamento convertido em maquinário parcelado!'
+              : 'Lançamento convertido em boleto parcelado!',
+          )
         } else {
-          await updateRecord('financial_transactions', editing.id, payload)
+          await updateRecord('financial_transactions', editing.id, {
+            ...payload,
+            is_installment_plan: false,
+            plan_total_amount: null,
+          })
           toast.success('Lançamento atualizado!')
         }
       } else if (isInstallmentPlanExpense(form)) {
@@ -240,6 +258,9 @@ export function FinancialPage() {
   const markPaid = async (row: Transaction) => {
     try {
       if (row.is_installment_plan) {
+        if ((await listInstallmentSchedules(row.id)).length === 0) {
+          await ensureInstallmentSchedules(row)
+        }
         await markInstallmentPaid(row.id)
         toast.success('Parcela confirmada!')
       } else {

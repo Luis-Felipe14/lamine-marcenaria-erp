@@ -157,12 +157,114 @@ export async function createInstallmentPlanTransaction(
   return full as unknown as FinancialTransaction
 }
 
+/**
+ * Gera o cronograma interno para um lançamento já marcado como plano parcelado
+ * (ou converte um lançamento simples em plano). Usado na criação, na edição e no reparo.
+ */
+export async function attachInstallmentSchedules(
+  transactionId: string,
+  totalAmount: number,
+  installmentCount: number,
+  firstDueDate: string,
+): Promise<FinancialInstallmentSchedule[]> {
+  const existing = await listInstallmentSchedules(transactionId)
+  if (existing.length > 0) return existing
+
+  const schedule = buildEqualInstallmentSchedule(totalAmount, installmentCount, firstDueDate)
+  const remaining = schedule.reduce((sum, row) => sum + row.amount, 0)
+
+  const { error: scheduleError } = await supabase
+    .from('financial_installment_schedules')
+    .insert(schedule.map((row) => ({
+      transaction_id: transactionId,
+      installment_number: row.installment_number,
+      amount: row.amount,
+      due_date: row.due_date,
+      is_paid: false,
+    })))
+
+  throwIfError(scheduleError, 'cronograma de parcelas')
+
+  const { error: parentError } = await supabase
+    .from('financial_transactions')
+    .update({
+      is_installment_plan: true,
+      plan_total_amount: totalAmount,
+      installment_total: installmentCount,
+      installment_number: null,
+      amount: remaining,
+      due_date: schedule[0]?.due_date ?? firstDueDate,
+      is_paid: false,
+      paid_date: null,
+    })
+    .eq('id', transactionId)
+
+  throwIfError(parentError, 'atualizar lançamento parcelado')
+
+  return listInstallmentSchedules(transactionId)
+}
+
+/** Se o plano está sem parcelas (ex.: edição antiga), recria o cronograma. */
+export async function ensureInstallmentSchedules(
+  tx: Pick<
+    FinancialTransaction,
+    'id' | 'is_installment_plan' | 'plan_total_amount' | 'amount' | 'installment_total' | 'due_date'
+  >,
+): Promise<FinancialInstallmentSchedule[]> {
+  const existing = await listInstallmentSchedules(tx.id)
+  if (existing.length > 0) return existing
+  if (!tx.is_installment_plan) return []
+
+  const total = Number(tx.plan_total_amount ?? tx.amount) || 0
+  const count = Number(tx.installment_total) || 0
+  const firstDue = tx.due_date ?? ''
+  if (total <= 0 || count < 2 || !firstDue) {
+    throw new Error(
+      'Este lançamento está marcado como parcelado, mas faltam dados para gerar o cronograma. Edite o valor, parcelas e vencimento.',
+    )
+  }
+
+  return attachInstallmentSchedules(tx.id, total, count, firstDue)
+}
+
+/**
+ * Converte um lançamento simples em plano parcelado com cronograma.
+ * Evita o bug de salvar is_installment_plan=true sem parcelas na edição.
+ */
+export async function convertToInstallmentPlan(
+  transactionId: string,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  const total = Number(payload.plan_total_amount ?? payload.amount) || 0
+  const count = Number(payload.installment_total) || 0
+  const firstDue = String(payload.due_date ?? '')
+
+  // Valida o cronograma antes de gravar o pai
+  buildEqualInstallmentSchedule(total, count, firstDue)
+
+  const { error } = await supabase
+    .from('financial_transactions')
+    .update({
+      ...payload,
+      is_installment_plan: true,
+      plan_total_amount: total,
+      installment_total: count,
+      installment_number: null,
+      is_paid: false,
+      paid_date: null,
+    })
+    .eq('id', transactionId)
+
+  throwIfError(error, 'converter lançamento parcelado')
+  await attachInstallmentSchedules(transactionId, total, count, firstDue)
+}
+
 async function syncParentFromSchedules(transactionId: string): Promise<void> {
   const schedules = await listInstallmentSchedules(transactionId)
   const unpaid = schedules.filter((s) => !s.is_paid)
   const remaining = unpaid.reduce((sum, s) => sum + s.amount, 0)
   const nextDue = unpaid[0]?.due_date ?? schedules[schedules.length - 1]?.due_date ?? null
-  const allPaid = unpaid.length === 0
+  const allPaid = unpaid.length === 0 && schedules.length > 0
 
   const { error } = await supabase
     .from('financial_transactions')
@@ -182,7 +284,19 @@ export async function markInstallmentPaid(
   transactionId: string,
   scheduleId?: string,
 ): Promise<void> {
-  const schedules = await listInstallmentSchedules(transactionId)
+  let schedules = await listInstallmentSchedules(transactionId)
+  if (schedules.length === 0) {
+    const { data: tx, error } = await supabase
+      .from('financial_transactions')
+      .select('id, is_installment_plan, plan_total_amount, amount, installment_total, due_date')
+      .eq('id', transactionId)
+      .single()
+    throwIfError(error, 'lançamento')
+    if (tx?.is_installment_plan) {
+      schedules = await ensureInstallmentSchedules(tx as FinancialTransaction)
+    }
+  }
+
   const target = scheduleId
     ? schedules.find((s) => s.id === scheduleId)
     : schedules.find((s) => !s.is_paid)
