@@ -18,7 +18,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { useConfirm } from '@/hooks/useConfirm'
-import { hasPermission } from '@/lib/permissions'
+import { useSecretaryAccess } from '@/hooks/useSecretaryAccess'
+import { hasPermission, normalizeRole } from '@/lib/permissions'
 import { formatDate } from '@/lib/utils'
 import { updateRecord, softDelete } from '@/services/api'
 import {
@@ -52,7 +53,11 @@ export function ArchitectsPage() {
   const queryClient = useQueryClient()
   const { confirm, dialogProps } = useConfirm()
   const role = useAuthStore((s) => s.profile?.role?.name) as UserRole | undefined
-  const canWrite = hasPermission(role, 'clients.*')
+  const { canAccessPath } = useSecretaryAccess()
+  // Gestor: clients.*; secretária: módulo Arquitetos liberado nas configurações
+  const canWrite =
+    hasPermission(role, 'clients.*') ||
+    (normalizeRole(role) === 'secretaria' && canAccessPath('/arquitetos'))
 
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
