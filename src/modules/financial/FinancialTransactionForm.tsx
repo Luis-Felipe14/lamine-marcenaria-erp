@@ -121,11 +121,20 @@ export function FinancialTransactionForm({
     return `Saldo a receber: ${formatCurrency(remaining)} (pedido ${formatCurrency(order.value)} − sinal)`
   }, [form.type, form.category, form.order_id, form.amount, orders])
 
-  const showRecurringMonths = shouldShowRecurringMonthsField(form, editing)
+  const showRecurringMonths = shouldShowRecurringMonthsField(form)
 
   const recurringMonthsHint = useMemo(() => {
     if (!showRecurringMonths) return null
     const count = getRecurringFixedBillMonthCount(form)
+    if (editing) {
+      if (count < 2) {
+        return 'Informe 2 ou mais para gerar os meses seguintes a partir deste vencimento.'
+      }
+      if (!form.due_date || !form.amount) {
+        return `Atualiza este lançamento e cria ${count - 1} mês(es) seguinte(s) — cada um editável`
+      }
+      return `Atualiza este lançamento e cria ${count - 1} de ${formatCurrency(form.amount)} — vencimento mensal a partir de ${form.due_date}`
+    }
     if (count < 2) {
       return 'Use 2 ou mais para gerar lançamentos nos meses seguintes. Com 1, lança só este mês.'
     }
@@ -133,7 +142,11 @@ export function FinancialTransactionForm({
       return `${count} lançamentos serão criados — um por mês, cada um editável separadamente`
     }
     return `${count} lançamentos de ${formatCurrency(form.amount)} — vencimento mensal a partir de ${form.due_date}`
-  }, [showRecurringMonths, form.recurring_months, form.due_date, form.amount])
+  }, [showRecurringMonths, editing, form.recurring_months, form.due_date, form.amount])
+
+  const recurringMonthsLabel = editing
+    ? 'Meses no total (inclui este)'
+    : 'Repetir por quantos meses?'
 
   const patchForm = (patch: Partial<FinancialFormState>) => {
     setForm((current) => applyFinancialFormContextChange(current, patch))
@@ -428,7 +441,7 @@ export function FinancialTransactionForm({
 
         {showRecurringMonths && (
           <div>
-            <Label>Repetir por quantos meses? *</Label>
+            <Label>{recurringMonthsLabel} *</Label>
             <Input
               type="number"
               min={1}

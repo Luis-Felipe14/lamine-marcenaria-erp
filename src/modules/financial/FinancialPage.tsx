@@ -37,6 +37,7 @@ import { createRecord, updateRecord, softDelete } from '@/services/api'
 import {
   createInstallmentPlanTransaction,
   createRecurringFixedBillTransactions,
+  appendRecurringFixedBillMonths,
   convertToInstallmentPlan,
   createDefaultFinancialTransactionFilters,
   ensureInstallmentSchedules,
@@ -145,7 +146,7 @@ export function FinancialPage() {
       document_number: row.document_number ?? '',
       installment_number: row.installment_number ?? '',
       installment_total: row.installment_total ?? '',
-      recurring_months: '',
+      recurring_months: row.category === 'contas_fixas' ? 1 : '',
       cash_destination: (row.cash_destination === 'madeireira' ? 'madeireira' : 'empresa') as CashDestination,
     })
     setDialogOpen(true)
@@ -220,7 +221,15 @@ export function FinancialPage() {
             is_installment_plan: false,
             plan_total_amount: null,
           })
-          toast.success('Lançamento atualizado!')
+          if (isRecurringFixedBillExpense(form)) {
+            const count = getRecurringFixedBillMonthCount(form)
+            const created = await appendRecurringFixedBillMonths(payload, count)
+            toast.success(
+              `Lançamento atualizado e ${created} mês(es) seguinte(s) criado(s) — edite cada um se o valor variar`,
+            )
+          } else {
+            toast.success('Lançamento atualizado!')
+          }
         }
       } else if (isInstallmentPlanExpense(form)) {
         await createInstallmentPlanTransaction(payload)

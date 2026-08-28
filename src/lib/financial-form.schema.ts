@@ -323,14 +323,15 @@ export function getFinancialFormFields(
   if (
     form.type === 'despesa'
     && form.category === 'contas_fixas'
-    && !isEditing
     && !isInstallmentPlanExpense(form)
     && getRecurringFixedBillMonthCount(form) >= 2
   ) {
     fields.due_date = {
       ...fields.due_date,
       label: '1º vencimento',
-      hint: 'Cada mês vira um lançamento separado — ajuste o valor de cada um depois, se necessário',
+      hint: isEditing
+        ? 'Os meses seguintes serão gerados a partir desta data — ajuste o valor de cada um depois'
+        : 'Cada mês vira um lançamento separado — ajuste o valor de cada um depois, se necessário',
       required: true,
     }
   }
@@ -468,8 +469,7 @@ export function isRecurringFixedBillExpense(form: FinancialFormState): boolean {
   return getRecurringFixedBillMonthCount(form) >= 2
 }
 
-export function shouldShowRecurringMonthsField(form: FinancialFormState, isEditing = false): boolean {
-  if (isEditing) return false
+export function shouldShowRecurringMonthsField(form: FinancialFormState): boolean {
   if (form.type !== 'despesa' || form.category !== 'contas_fixas') return false
   if (isInstallmentPlanExpense(form)) return false
   return true

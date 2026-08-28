@@ -215,6 +215,23 @@ export async function createInstallmentPlanTransaction(
 }
 
 /** Contas fixas: um lançamento independente por mês (valores editáveis individualmente). */
+function buildRecurringFixedBillRows(
+  payload: Record<string, unknown>,
+  monthCount: number,
+  startOffset: number,
+): Record<string, unknown>[] {
+  const firstDue = String(payload.due_date ?? '')
+  return Array.from({ length: monthCount }, (_, index) => ({
+    ...payload,
+    due_date: shiftDueDateByMonths(firstDue, startOffset + index),
+    is_paid: false,
+    is_installment_plan: false,
+    plan_total_amount: null,
+    installment_number: null,
+    installment_total: null,
+  }))
+}
+
 export async function createRecurringFixedBillTransactions(
   payload: Record<string, unknown>,
   monthCount: number,
@@ -227,19 +244,32 @@ export async function createRecurringFixedBillTransactions(
     throw new Error('Contas fixas recorrentes exigem ao menos 2 meses')
   }
 
-  const rows = Array.from({ length: monthCount }, (_, index) => ({
-    ...payload,
-    due_date: index === 0 ? firstDue : shiftDueDateByMonths(firstDue, index),
-    is_paid: false,
-    is_installment_plan: false,
-    plan_total_amount: null,
-    installment_number: null,
-    installment_total: null,
-  }))
+  const rows = buildRecurringFixedBillRows(payload, monthCount, 0)
 
   const { error } = await supabase.from('financial_transactions').insert(rows)
   throwIfError(error, 'lançamentos de contas fixas')
   return monthCount
+}
+
+/** Edição: mantém o lançamento atual e cria os meses seguintes. */
+export async function appendRecurringFixedBillMonths(
+  payload: Record<string, unknown>,
+  totalMonthCount: number,
+): Promise<number> {
+  const firstDue = String(payload.due_date ?? '')
+  if (!firstDue) {
+    throw new Error('Informe o vencimento do primeiro mês')
+  }
+  if (totalMonthCount < 2) {
+    throw new Error('Contas fixas recorrentes exigem ao menos 2 meses')
+  }
+
+  const additionalCount = totalMonthCount - 1
+  const rows = buildRecurringFixedBillRows(payload, additionalCount, 1)
+
+  const { error } = await supabase.from('financial_transactions').insert(rows)
+  throwIfError(error, 'lançamentos de contas fixas')
+  return additionalCount
 }
 
 /**
