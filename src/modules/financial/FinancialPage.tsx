@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { Plus, Pencil, TrendingUp, TrendingDown, Trash2, ListOrdered } from 'lucide-react'
+import { Plus, Pencil, TrendingUp, TrendingDown, Trash2, ListOrdered, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
@@ -40,6 +40,7 @@ import {
   convertToInstallmentPlan,
   createDefaultFinancialTransactionFilters,
   ensureInstallmentSchedules,
+  isDefaultFinancialTransactionFilters,
   listInstallmentSchedules,
   markInstallmentPaid,
   type FinancialInstallmentSchedule,
@@ -96,6 +97,8 @@ export function FinancialPage() {
     if (filters.year !== 'all') years.add(filters.year)
     return [...years].sort((a, b) => b - a)
   }, [filters.year])
+
+  const filtersAreDefault = isDefaultFinancialTransactionFilters(filters)
 
   const patchFilters = (patch: Partial<FinancialTransactionFilters>) => {
     setFilters((current) => ({ ...current, ...patch }))
@@ -473,6 +476,17 @@ export function FinancialPage() {
               ))}
             </SelectContent>
           </Select>
+
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 gap-1.5"
+            disabled={filtersAreDefault}
+            onClick={() => setFilters(createDefaultFinancialTransactionFilters())}
+          >
+            <X className="h-3.5 w-3.5" />
+            Limpar filtros
+          </Button>
         </div>
       </TableToolbar>
 

@@ -70,6 +70,16 @@ export function createDefaultFinancialTransactionFilters(): FinancialTransaction
   }
 }
 
+export function isDefaultFinancialTransactionFilters(filters: FinancialTransactionFilters): boolean {
+  const defaults = createDefaultFinancialTransactionFilters()
+  return (
+    filters.type === defaults.type
+    && filters.paymentMethod === defaults.paymentMethod
+    && filters.year === defaults.year
+    && filters.month === defaults.month
+  )
+}
+
 function applyFinancialTransactionFilters(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   query: any,
