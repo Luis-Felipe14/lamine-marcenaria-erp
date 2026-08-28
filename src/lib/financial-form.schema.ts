@@ -18,6 +18,8 @@ export interface FinancialFormState {
   document_number: string
   installment_number: number | ''
   installment_total: number | ''
+  /** Contas fixas: quantos meses gerar (cada um vira lançamento editável) */
+  recurring_months: number | ''
   cash_destination: CashDestination
 }
 
@@ -63,6 +65,7 @@ export function createEmptyFinancialForm(type: FinancialFormType = 'receita'): F
     document_number: '',
     installment_number: '',
     installment_total: '',
+    recurring_months: '',
     cash_destination: 'empresa',
   }
 }
@@ -317,6 +320,21 @@ export function getFinancialFormFields(
     fields.installment_total = { ...fields.installment_total, visible: true, required: true }
   }
 
+  if (
+    form.type === 'despesa'
+    && form.category === 'contas_fixas'
+    && !isEditing
+    && !isInstallmentPlanExpense(form)
+    && getRecurringFixedBillMonthCount(form) >= 2
+  ) {
+    fields.due_date = {
+      ...fields.due_date,
+      label: '1º vencimento',
+      hint: 'Cada mês vira um lançamento separado — ajuste o valor de cada um depois, se necessário',
+      required: true,
+    }
+  }
+
   if (isEditing) {
     for (const key of Object.keys(fields) as FinancialFieldKey[]) {
       if (key === 'installment_number') continue
@@ -424,7 +442,37 @@ export function validateFinancialForm(
     }
   }
 
+  if (isRecurringFixedBillExpense(form) && !form.due_date) {
+    return 'Informe o vencimento do primeiro mês'
+  }
+
+  const recurringMonths = getRecurringFixedBillMonthCount(form)
+  if (form.type === 'despesa' && form.category === 'contas_fixas' && recurringMonths > 36) {
+    return 'Máximo de 36 meses para contas fixas'
+  }
+
   return null
+}
+
+export function getRecurringFixedBillMonthCount(form: FinancialFormState): number {
+  if (form.recurring_months === '') return 1
+  const count = Math.floor(Number(form.recurring_months))
+  if (!Number.isFinite(count) || count < 1) return 1
+  return count
+}
+
+/** Contas fixas com 2+ meses → um lançamento independente por mês */
+export function isRecurringFixedBillExpense(form: FinancialFormState): boolean {
+  if (form.type !== 'despesa' || form.category !== 'contas_fixas') return false
+  if (isInstallmentPlanExpense(form)) return false
+  return getRecurringFixedBillMonthCount(form) >= 2
+}
+
+export function shouldShowRecurringMonthsField(form: FinancialFormState, isEditing = false): boolean {
+  if (isEditing) return false
+  if (form.type !== 'despesa' || form.category !== 'contas_fixas') return false
+  if (isInstallmentPlanExpense(form)) return false
+  return true
 }
 
 /** Maquinário ou despesa em boleto com 2+ parcelas → cronograma interno */
@@ -488,6 +536,14 @@ export function applyFinancialFormContextChange(
   const next = { ...form, ...patch }
   if (next.type === 'despesa') {
     next.cash_destination = 'empresa'
+  }
+  if ('category' in patch) {
+    if (next.type === 'despesa' && next.category === 'contas_fixas' && next.recurring_months === '') {
+      next.recurring_months = 12
+    }
+    if (patch.category && patch.category !== 'contas_fixas') {
+      next.recurring_months = ''
+    }
   }
   const fields = getFinancialFormFields(next)
   return clearHiddenFinancialFields(next, fields)

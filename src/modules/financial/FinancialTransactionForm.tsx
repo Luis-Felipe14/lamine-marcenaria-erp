@@ -17,7 +17,9 @@ import {
   applyFinancialFormContextChange,
   getFinancialFormFields,
   getLinkSectionTitle,
+  getRecurringFixedBillMonthCount,
   shouldShowPaymentDetails,
+  shouldShowRecurringMonthsField,
   type FinancialFormState,
   type FinancialFormType,
 } from '@/lib/financial-form.schema'
@@ -119,6 +121,20 @@ export function FinancialTransactionForm({
     return `Saldo a receber: ${formatCurrency(remaining)} (pedido ${formatCurrency(order.value)} − sinal)`
   }, [form.type, form.category, form.order_id, form.amount, orders])
 
+  const showRecurringMonths = shouldShowRecurringMonthsField(form, editing)
+
+  const recurringMonthsHint = useMemo(() => {
+    if (!showRecurringMonths) return null
+    const count = getRecurringFixedBillMonthCount(form)
+    if (count < 2) {
+      return 'Use 2 ou mais para gerar lançamentos nos meses seguintes. Com 1, lança só este mês.'
+    }
+    if (!form.due_date || !form.amount) {
+      return `${count} lançamentos serão criados — um por mês, cada um editável separadamente`
+    }
+    return `${count} lançamentos de ${formatCurrency(form.amount)} — vencimento mensal a partir de ${form.due_date}`
+  }, [showRecurringMonths, form.recurring_months, form.due_date, form.amount])
+
   const patchForm = (patch: Partial<FinancialFormState>) => {
     setForm((current) => applyFinancialFormContextChange(current, patch))
   }
@@ -145,6 +161,7 @@ export function FinancialTransactionForm({
                 document_number: '',
                 installment_number: '',
                 installment_total: '',
+                recurring_months: '',
                 cash_destination: 'empresa',
               })
             }}
@@ -406,6 +423,24 @@ export function FinancialTransactionForm({
               })}
             />
             <FieldHint text={fields.installment_total.hint} />
+          </div>
+        )}
+
+        {showRecurringMonths && (
+          <div>
+            <Label>Repetir por quantos meses? *</Label>
+            <Input
+              type="number"
+              min={1}
+              max={36}
+              placeholder="Ex.: 12"
+              value={form.recurring_months}
+              onChange={(e) => setForm({
+                ...form,
+                recurring_months: e.target.value === '' ? '' : Number(e.target.value),
+              })}
+            />
+            <FieldHint text={recurringMonthsHint ?? undefined} />
           </div>
         )}
 

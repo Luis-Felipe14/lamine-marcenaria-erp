@@ -1,8 +1,9 @@
 import { supabase } from '@/lib/supabase'
 import { throwIfError } from '@/lib/supabase-helpers'
-import { PAGE_SIZE } from '@/lib/constants'
+import { PAGE_SIZE, SELECT_NONE } from '@/lib/constants'
 import { paginatedQuery } from '@/services/api'
-import { buildEqualInstallmentSchedule } from '@/lib/financial-installments'
+import { buildEqualInstallmentSchedule, shiftDueDateByMonths } from '@/lib/financial-installments'
+import { endOfMonth, format } from 'date-fns'
 
 const TRANSACTION_SELECT =
   'id, type, category, description, amount, due_date, is_paid, paid_date, client_id, order_id, purchase_id, employee_id, payment_method, notes, supplier_id, document_number, installment_number, installment_total, cash_destination, is_installment_plan, plan_total_amount, client:clients(name), order:orders(number), purchase:purchases(number, description, supplier_id, invoice_number), supplier:suppliers(name), employee:employees(name, position)'
@@ -53,6 +54,52 @@ export interface FinancialSummary {
   aReceber: number
 }
 
+export interface FinancialTransactionFilters {
+  type: 'all' | 'receita' | 'despesa'
+  paymentMethod: string
+  year: number | 'all'
+  month: number | 'all'
+}
+
+export function createDefaultFinancialTransactionFilters(): FinancialTransactionFilters {
+  return {
+    type: 'all',
+    paymentMethod: 'all',
+    year: new Date().getFullYear(),
+    month: 'all',
+  }
+}
+
+function applyFinancialTransactionFilters(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  query: any,
+  filters: FinancialTransactionFilters,
+) {
+  let q = query
+
+  if (filters.type !== 'all') {
+    q = q.eq('type', filters.type)
+  }
+
+  if (filters.paymentMethod !== 'all') {
+    q = filters.paymentMethod === SELECT_NONE
+      ? q.is('payment_method', null)
+      : q.eq('payment_method', filters.paymentMethod)
+  }
+
+  if (filters.year !== 'all') {
+    if (filters.month === 'all') {
+      q = q.gte('due_date', `${filters.year}-01-01`).lte('due_date', `${filters.year}-12-31`)
+    } else {
+      const start = format(new Date(filters.year, filters.month - 1, 1), 'yyyy-MM-dd')
+      const end = format(endOfMonth(new Date(filters.year, filters.month - 1, 1)), 'yyyy-MM-dd')
+      q = q.gte('due_date', start).lte('due_date', end)
+    }
+  }
+
+  return q
+}
+
 export async function getFinancialSummary(): Promise<FinancialSummary> {
   const { data, error } = await supabase.rpc('get_financial_summary')
 
@@ -69,7 +116,7 @@ export async function getFinancialSummary(): Promise<FinancialSummary> {
 
 export async function listFinancialTransactions(
   page: number,
-  filter: 'all' | 'receita' | 'despesa' = 'all',
+  filters: FinancialTransactionFilters = createDefaultFinancialTransactionFilters(),
   pageSize = PAGE_SIZE
 ) {
   return paginatedQuery<FinancialTransaction>(
@@ -78,7 +125,7 @@ export async function listFinancialTransactions(
     {
       select: TRANSACTION_SELECT,
       orderBy: { column: 'due_date', ascending: true },
-      filters: (q) => (filter === 'all' ? q : q.eq('type', filter)),
+      filters: (q) => applyFinancialTransactionFilters(q, filters),
     }
   )
 }
@@ -155,6 +202,34 @@ export async function createInstallmentPlanTransaction(
   }
 
   return full as unknown as FinancialTransaction
+}
+
+/** Contas fixas: um lançamento independente por mês (valores editáveis individualmente). */
+export async function createRecurringFixedBillTransactions(
+  payload: Record<string, unknown>,
+  monthCount: number,
+): Promise<number> {
+  const firstDue = String(payload.due_date ?? '')
+  if (!firstDue) {
+    throw new Error('Informe o vencimento do primeiro mês')
+  }
+  if (monthCount < 2) {
+    throw new Error('Contas fixas recorrentes exigem ao menos 2 meses')
+  }
+
+  const rows = Array.from({ length: monthCount }, (_, index) => ({
+    ...payload,
+    due_date: index === 0 ? firstDue : shiftDueDateByMonths(firstDue, index),
+    is_paid: false,
+    is_installment_plan: false,
+    plan_total_amount: null,
+    installment_number: null,
+    installment_total: null,
+  }))
+
+  const { error } = await supabase.from('financial_transactions').insert(rows)
+  throwIfError(error, 'lançamentos de contas fixas')
+  return monthCount
 }
 
 /**

@@ -50,3 +50,13 @@ function formatYmd(date: Date): string {
   const d = String(date.getDate()).padStart(2, '0')
   return `${y}-${m}-${d}`
 }
+
+/** Desloca uma data ISO (yyyy-MM-dd) em N meses, mantendo o dia quando possível. */
+export function shiftDueDateByMonths(firstDueDate: string, monthsOffset: number): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(firstDueDate)) {
+    throw new Error('Data de vencimento inválida')
+  }
+  const [y0, m0, d0] = firstDueDate.split('-').map(Number)
+  const due = addMonthsKeepingDay(y0, m0 - 1, d0, monthsOffset)
+  return formatYmd(due)
+}

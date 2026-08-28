@@ -12,7 +12,8 @@ export const queryKeys = {
   financialSummary: ['financial', 'summary'] as const,
   financialSettings: ['financial', 'settings'] as const,
   secretaryAccess: ['settings', 'secretary-access'] as const,
-  financialTransactions: (page: number, filter: string) => ['financial', 'transactions', page, filter] as const,
+  financialTransactions: (page: number, filters: Record<string, unknown>) =>
+    ['financial', 'transactions', page, filters] as const,
   lumberCreditStats: ['lumber-credit', 'stats'] as const,
   lumberCreditAllMovements: ['lumber-credit', 'all-movements'] as const,
   lumberCreditBalancesByClient: ['lumber-credit', 'balances-by-client'] as const,

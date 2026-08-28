@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Plus, Pencil, TrendingUp, TrendingDown, Trash2, ListOrdered } from 'lucide-react'
 import { toast } from 'sonner'
@@ -9,18 +9,23 @@ import { DataTable } from '@/components/shared/DataTable'
 import { TableToolbar } from '@/components/shared/TableToolbar'
 import { StatCard, StatGrid } from '@/components/shared/StatCard'
 import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import {
   getFinancialCategoryLabel,
   getPaymentMethodLabel,
   getCashDestinationLabel,
+  PAYMENT_METHODS,
+  SELECT_NONE,
   type CashDestination,
 } from '@/lib/constants'
 import {
   createEmptyFinancialForm,
   getFinancialFormFields,
+  getRecurringFixedBillMonthCount,
   isInstallmentPlanExpense,
+  isRecurringFixedBillExpense,
   sanitizeFinancialPayload,
   validateFinancialForm,
   type FinancialFormState,
@@ -31,12 +36,15 @@ import { invalidateDashboardMetrics } from '@/lib/invalidate-dashboard'
 import { createRecord, updateRecord, softDelete } from '@/services/api'
 import {
   createInstallmentPlanTransaction,
+  createRecurringFixedBillTransactions,
   convertToInstallmentPlan,
+  createDefaultFinancialTransactionFilters,
   ensureInstallmentSchedules,
   listInstallmentSchedules,
   markInstallmentPaid,
   type FinancialInstallmentSchedule,
   type FinancialTransaction,
+  type FinancialTransactionFilters,
 } from '@/services/financial.service'
 import {
   useFinancialSummary,
@@ -56,7 +64,7 @@ interface Transaction extends FinancialTransaction {}
 export function FinancialPage() {
   const queryClient = useQueryClient()
   const { confirm, dialogProps } = useConfirm()
-  const [filter, setFilter] = useState<'all' | 'receita' | 'despesa'>('all')
+  const [filters, setFilters] = useState<FinancialTransactionFilters>(createDefaultFinancialTransactionFilters)
   const [page, setPage] = useState(1)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<Transaction | null>(null)
@@ -68,7 +76,7 @@ export function FinancialPage() {
   const [scheduleLoading, setScheduleLoading] = useState(false)
   const [payingScheduleId, setPayingScheduleId] = useState<string | null>(null)
 
-  const { data: txResult, isLoading, isFetching } = useFinancialTransactions(page, filter)
+  const { data: txResult, isLoading, isFetching } = useFinancialTransactions(page, filters)
   const { data: summary = { receitas: 0, despesas: 0, aPagar: 0, aReceber: 0 } } = useFinancialSummary()
   const { canViewAmounts, canEditFinancial } = useSecretaryAccess()
   const { data: clients = [] } = useLookupClients()
@@ -82,9 +90,20 @@ export function FinancialPage() {
   const showFinancialSummary = canViewAmounts
   const money = (value: number) => formatCurrencyMasked(value, canViewAmounts, formatCurrency)
 
+  const yearOptions = useMemo(() => {
+    const current = new Date().getFullYear()
+    const years = new Set<number>([current, current - 1, current - 2, current + 1])
+    if (filters.year !== 'all') years.add(filters.year)
+    return [...years].sort((a, b) => b - a)
+  }, [filters.year])
+
+  const patchFilters = (patch: Partial<FinancialTransactionFilters>) => {
+    setFilters((current) => ({ ...current, ...patch }))
+  }
+
   useEffect(() => {
     setPage(1)
-  }, [filter])
+  }, [filters])
 
   const invalidateFinancial = async () => {
     await Promise.all([
@@ -123,6 +142,7 @@ export function FinancialPage() {
       document_number: row.document_number ?? '',
       installment_number: row.installment_number ?? '',
       installment_total: row.installment_total ?? '',
+      recurring_months: '',
       cash_destination: (row.cash_destination === 'madeireira' ? 'madeireira' : 'empresa') as CashDestination,
     })
     setDialogOpen(true)
@@ -205,6 +225,12 @@ export function FinancialPage() {
           form.category === 'maquinario'
             ? 'Maquinário lançado com cronograma de parcelas!'
             : 'Boleto lançado com cronograma de parcelas!',
+        )
+      } else if (isRecurringFixedBillExpense(form)) {
+        const count = getRecurringFixedBillMonthCount(form)
+        await createRecurringFixedBillTransactions(payload, count)
+        toast.success(
+          `${count} lançamentos de contas fixas criados — edite cada mês se o valor variar (ex.: energia, água)`,
         )
       } else {
         await createRecord('financial_transactions', { ...payload, is_paid: false })
@@ -380,12 +406,73 @@ export function FinancialPage() {
       )}
 
       <TableToolbar panel zoneLabel="Filtros">
-        <div className="flex gap-1">
-          {(['all', 'receita', 'despesa'] as const).map((f) => (
-            <Button key={f} variant={filter === f ? 'default' : 'outline'} size="sm" onClick={() => setFilter(f)}>
-              {f === 'all' ? 'Todos' : f === 'receita' ? 'Receitas' : 'Despesas'}
-            </Button>
-          ))}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex gap-1">
+            {(['all', 'receita', 'despesa'] as const).map((f) => (
+              <Button
+                key={f}
+                variant={filters.type === f ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => patchFilters({ type: f })}
+              >
+                {f === 'all' ? 'Todos' : f === 'receita' ? 'Receitas' : 'Despesas'}
+              </Button>
+            ))}
+          </div>
+
+          <Select
+            value={filters.paymentMethod}
+            onValueChange={(value) => patchFilters({ paymentMethod: value })}
+          >
+            <SelectTrigger className="h-9 w-[170px]">
+              <SelectValue placeholder="Forma de pagamento" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as formas</SelectItem>
+              <SelectItem value={SELECT_NONE}>Não informado</SelectItem>
+              {PAYMENT_METHODS.map((method) => (
+                <SelectItem key={method.value} value={method.value}>
+                  {method.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={String(filters.year)}
+            onValueChange={(value) => patchFilters({
+              year: value === 'all' ? 'all' : Number(value),
+              month: value === 'all' ? 'all' : filters.month,
+            })}
+          >
+            <SelectTrigger className="h-9 w-[120px]">
+              <SelectValue placeholder="Ano" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os anos</SelectItem>
+              {yearOptions.map((year) => (
+                <SelectItem key={year} value={String(year)}>{year}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={String(filters.month)}
+            onValueChange={(value) => patchFilters({ month: value === 'all' ? 'all' : Number(value) })}
+            disabled={filters.year === 'all'}
+          >
+            <SelectTrigger className="h-9 w-[150px]">
+              <SelectValue placeholder="Mês" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os meses</SelectItem>
+              {Array.from({ length: 12 }, (_, index) => index + 1).map((month) => (
+                <SelectItem key={month} value={String(month)}>
+                  {new Date(2000, month - 1).toLocaleString('pt-BR', { month: 'long' })}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </TableToolbar>
 

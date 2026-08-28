@@ -11,7 +11,7 @@ import {
   getOperationalMetrics,
   getFinancialDashboardMetrics,
 } from '@/services/dashboard.service'
-import { getFinancialSummary, getFinancialSettings, listFinancialTransactions } from '@/services/financial.service'
+import { getFinancialSummary, getFinancialSettings, listFinancialTransactions, type FinancialTransactionFilters } from '@/services/financial.service'
 import {
   computeLumberCreditStats,
   getLumberCreditSettings,
@@ -122,10 +122,10 @@ export function useFinancialSettings() {
   })
 }
 
-export function useFinancialTransactions(page: number, filter: 'all' | 'receita' | 'despesa') {
+export function useFinancialTransactions(page: number, filters: FinancialTransactionFilters) {
   return useQuery({
-    queryKey: queryKeys.financialTransactions(page, filter),
-    queryFn: () => listFinancialTransactions(page, filter),
+    queryKey: queryKeys.financialTransactions(page, filters as unknown as Record<string, unknown>),
+    queryFn: () => listFinancialTransactions(page, filters),
     placeholderData: keepPreviousData,
   })
 }
