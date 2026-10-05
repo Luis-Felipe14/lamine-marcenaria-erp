@@ -18,7 +18,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Badge } from '@/components/ui/badge'
 import { supabase } from '@/lib/supabase'
 import { BUDGET_STATUSES, getBudgetStatusLabel } from '@/lib/constants'
-import { formatCurrency } from '@/lib/utils'
+import { format } from 'date-fns'
+import { formatCurrency, formatDate } from '@/lib/utils'
 import { createRecord, updateRecord, softDelete } from '@/services/api'
 import { downloadBudgetProposalPdf } from '@/services/budget-pdf.service'
 import {
@@ -91,6 +92,7 @@ const emptyEnvironment = (name = 'Sala'): BudgetEnvironmentForm => ({
 const emptyForm = (defaults?: Partial<BudgetProposalDefaults>) => ({
   client_id: '',
   linked_lead_id: null as string | null,
+  date: format(new Date(), 'yyyy-MM-dd'),
   project_name: '',
   measurements: '',
   discount: 0,
@@ -230,6 +232,7 @@ export function BudgetsPage() {
 
       const row = full as {
         client_id: string
+        date: string | null
         project_name: string
         measurements: string | null
         discount: number
@@ -303,6 +306,7 @@ export function BudgetsPage() {
       setForm({
         client_id: row.client_id,
         linked_lead_id: null,
+        date: row.date ?? format(new Date(), 'yyyy-MM-dd'),
         project_name: row.project_name,
         measurements: row.measurements ?? '',
         discount: row.discount ?? 0,
@@ -417,6 +421,10 @@ export function BudgetsPage() {
       toast.error('Cliente e projeto são obrigatórios')
       return
     }
+    if (!form.date) {
+      toast.error('Informe a data do orçamento')
+      return
+    }
     if (!form.environments.some((env) => env.name.trim())) {
       toast.error('Adicione pelo menos um ambiente com nome')
       return
@@ -445,6 +453,7 @@ export function BudgetsPage() {
 
       const payload = {
         client_id,
+        date: form.date,
         project_name: form.project_name.trim(),
         environment: primaryEnvironment,
         measurements: form.measurements.trim() || null,
@@ -633,6 +642,18 @@ export function BudgetsPage() {
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+                <div>
+                  <Label>Data do orçamento</Label>
+                  <Input
+                    type="date"
+                    className="sm:w-56"
+                    value={form.date}
+                    onChange={(e) => setForm({ ...form, date: e.target.value })}
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Data impressa no PDF — a validade da proposta é calculada a partir dela
+                  </p>
                 </div>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
@@ -1011,6 +1032,7 @@ export function BudgetsPage() {
           { key: 'number', header: '#', render: (r) => `#${r.number}` },
           { key: 'client', header: 'Cliente', render: (r) => r.client?.name ?? '-' },
           { key: 'project_name', header: 'Projeto' },
+          { key: 'date', header: 'Data', render: (r) => formatDate(r.date) },
           { key: 'total_value', header: 'Valor', render: (r) => formatCurrency(r.total_value) },
           { key: 'status', header: 'Status', render: (r) => <Badge>{getBudgetStatusLabel(r.status)}</Badge> },
           { key: 'actions', header: '', render: (r) => (

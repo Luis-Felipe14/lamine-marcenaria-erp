@@ -4,31 +4,41 @@ import type { Database } from '@/types/database'
 
 type LeadRow = Database['public']['Tables']['leads']['Row']
 
-async function fetchRawLeads(): Promise<LeadRow[]> {
+const LEAD_COLUMNS =
+  'id, name, status, estimated_value, origin, phone, whatsapp, email, notes, architect_id, client_id, responsible_id, created_at'
+
+async function fetchRawLeads(): Promise<{ rows: LeadRow[]; embedded: boolean }> {
   const embedded = await supabase
     .from('leads')
-    .select('*, client:clients(name), responsible:users!responsible_id(full_name), architect:architects(name)')
+    .select(`${LEAD_COLUMNS}, client:clients(name), responsible:users!responsible_id(full_name), architect:architects(name)`)
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
 
-  if (!embedded.error) return embedded.data ?? []
+  if (!embedded.error) return { rows: (embedded.data ?? []) as unknown as LeadRow[], embedded: true }
 
   const fallback = await supabase
     .from('leads')
-    .select('*')
+    .select(LEAD_COLUMNS)
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
 
   if (fallback.error) throw fallback.error
-  return fallback.data ?? []
+  return { rows: (fallback.data ?? []) as unknown as LeadRow[], embedded: false }
 }
 
 export async function fetchEnrichedLeads(): Promise<EnrichedLead[]> {
-  const rawLeads = await fetchRawLeads()
+  const { rows: rawLeads, embedded: hasEmbeddedNames } = await fetchRawLeads()
   const leadIds = rawLeads.map((l) => l.id)
-  const responsibleIds = [...new Set(rawLeads.map((l) => l.responsible_id).filter(Boolean))] as string[]
-  const clientIds = [...new Set(rawLeads.map((l) => l.client_id).filter(Boolean))] as string[]
-  const architectIds = [...new Set(rawLeads.map((l) => l.architect_id).filter(Boolean))] as string[]
+  const needsNameLookups = !hasEmbeddedNames
+  const responsibleIds = needsNameLookups
+    ? [...new Set(rawLeads.map((l) => l.responsible_id).filter(Boolean))] as string[]
+    : []
+  const clientIds = needsNameLookups
+    ? [...new Set(rawLeads.map((l) => l.client_id).filter(Boolean))] as string[]
+    : []
+  const architectIds = needsNameLookups
+    ? [...new Set(rawLeads.map((l) => l.architect_id).filter(Boolean))] as string[]
+    : []
 
   const [contacts, budgets, usersRes, clientsRes, architectsRes] = await Promise.all([
     leadIds.length > 0

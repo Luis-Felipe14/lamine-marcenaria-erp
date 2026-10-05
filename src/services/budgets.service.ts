@@ -37,7 +37,7 @@ export async function listBudgetsPaginated(page: number, pageSize = PAGE_SIZE) {
     'budgets',
     { page, pageSize },
     {
-      select: '*, client:clients(name)',
+      select: 'id, number, client_id, project_name, environment, total_value, status, date, client:clients(name)',
       orderBy: { column: 'created_at', ascending: false },
     },
   )
