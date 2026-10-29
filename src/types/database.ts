@@ -304,6 +304,9 @@ export interface Database {
           installment_total: number | null
           is_installment_plan: boolean
           plan_total_amount: number | null
+          is_order_balance: boolean
+          balance_original_amount: number | null
+          balance_transaction_id: string | null
           cash_destination: string
           created_at: string
           updated_at: string

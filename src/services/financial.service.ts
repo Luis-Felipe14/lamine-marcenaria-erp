@@ -4,9 +4,10 @@ import { PAGE_SIZE, SELECT_NONE } from '@/lib/constants'
 import { paginatedQuery } from '@/services/api'
 import { buildEqualInstallmentSchedule, shiftDueDateByMonths } from '@/lib/financial-installments'
 import { endOfMonth, format } from 'date-fns'
+import { formatCurrency } from '@/lib/utils'
 
 const TRANSACTION_SELECT =
-  'id, type, category, description, amount, due_date, is_paid, paid_date, client_id, order_id, purchase_id, employee_id, payment_method, notes, supplier_id, document_number, installment_number, installment_total, cash_destination, is_installment_plan, plan_total_amount, client:clients(name), order:orders(number), purchase:purchases(number, description, supplier_id, invoice_number), supplier:suppliers(name), employee:employees(name, position)'
+  'id, type, category, description, amount, due_date, is_paid, paid_date, client_id, order_id, purchase_id, employee_id, payment_method, notes, supplier_id, document_number, installment_number, installment_total, cash_destination, is_installment_plan, plan_total_amount, is_order_balance, balance_original_amount, balance_transaction_id, client:clients(name), order:orders(number), purchase:purchases(number, description, supplier_id, invoice_number), supplier:suppliers(name), employee:employees(name, position)'
 
 export interface FinancialTransaction {
   id: string
@@ -30,6 +31,9 @@ export interface FinancialTransaction {
   cash_destination: string
   is_installment_plan: boolean
   plan_total_amount: number | null
+  is_order_balance: boolean
+  balance_original_amount: number | null
+  balance_transaction_id: string | null
   client?: { name: string } | null
   order?: { number: number } | null
   purchase?: { number: number; description: string | null; supplier_id: string | null; invoice_number: string | null } | null
@@ -107,7 +111,151 @@ function applyFinancialTransactionFilters(
     }
   }
 
+  // Saldos de pedido ficam na área própria; só saldos já confirmados como recebidos seguem na tabela
+  q = q.or('is_order_balance.eq.false,and(is_paid.eq.true,amount.gt.0)')
+
   return q
+}
+
+export async function listOpenOrderBalances(): Promise<FinancialTransaction[]> {
+  const { data, error } = await supabase
+    .from('financial_transactions')
+    .select(TRANSACTION_SELECT)
+    .eq('is_order_balance', true)
+    .eq('is_paid', false)
+    .gt('amount', 0)
+    .is('deleted_at', null)
+    .order('due_date', { ascending: true, nullsFirst: false })
+
+  throwIfError(error, 'saldos dos pedidos')
+  return (data ?? []) as unknown as FinancialTransaction[]
+}
+
+function roundMoney(value: number): number {
+  return Math.round(value * 100) / 100
+}
+
+export interface OrderBalanceRef {
+  id: string
+  amount: number
+}
+
+async function findOpenOrderBalance(orderId: string): Promise<OrderBalanceRef | null> {
+  const { data, error } = await supabase
+    .from('financial_transactions')
+    .select('id, amount')
+    .eq('order_id', orderId)
+    .eq('is_order_balance', true)
+    .eq('is_paid', false)
+    .gt('amount', 0)
+    .is('deleted_at', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  throwIfError(error, 'saldo do pedido')
+  return data ? { id: data.id, amount: Number(data.amount) } : null
+}
+
+async function getAdjustableOrderBalance(balanceId: string): Promise<OrderBalanceRef | null> {
+  const { data, error } = await supabase
+    .from('financial_transactions')
+    .select('id, amount, is_paid')
+    .eq('id', balanceId)
+    .is('deleted_at', null)
+    .maybeSingle()
+
+  throwIfError(error, 'saldo do pedido')
+  if (!data) return null
+  // Saldo confirmado como pago pelo usuário (com valor) não é mais ajustado automaticamente
+  if (data.is_paid && Number(data.amount) > 0) return null
+  return { id: data.id, amount: Number(data.amount) }
+}
+
+/**
+ * Saldo que um pagamento do pedido abate. Na edição, mantém o vínculo atual
+ * (somando de volta o valor antigo); senão, usa o saldo em aberto do pedido.
+ */
+export async function getOrderBalanceForPayment(
+  orderId: string,
+  linkedBalanceId?: string | null,
+): Promise<OrderBalanceRef | null> {
+  if (linkedBalanceId) {
+    const linked = await getAdjustableOrderBalance(linkedBalanceId)
+    if (linked) return linked
+  }
+  return findOpenOrderBalance(orderId)
+}
+
+/** Valida o valor contra o saldo disponível e retorna o id do saldo a abater (ou null). */
+export async function resolveOrderBalanceForPayment(args: {
+  orderId: string
+  amount: number
+  previous?: { balanceId: string | null; orderId: string | null; amount: number }
+}): Promise<string | null> {
+  const keepLinkId = args.previous?.balanceId && args.previous.orderId === args.orderId
+    ? args.previous.balanceId
+    : null
+  const balance = await getOrderBalanceForPayment(args.orderId, keepLinkId)
+  if (!balance) return null
+
+  const available = roundMoney(balance.amount + (keepLinkId === balance.id ? args.previous!.amount : 0))
+  if (roundMoney(args.amount) > available) {
+    throw new Error(`O valor é maior que o saldo em aberto deste pedido (${formatCurrency(available)})`)
+  }
+  return balance.id
+}
+
+async function sumLinkedPayments(balanceId: string): Promise<number> {
+  const { data, error } = await supabase
+    .from('financial_transactions')
+    .select('amount')
+    .eq('balance_transaction_id', balanceId)
+    .is('deleted_at', null)
+
+  throwIfError(error, 'pagamentos do pedido')
+  return roundMoney((data ?? []).reduce((sum, row) => sum + Number(row.amount), 0))
+}
+
+/** Saldo atual = valor original − pagamentos vinculados. Zerado → quitado. */
+export async function recomputeOrderBalance(balanceId: string): Promise<void> {
+  const { data: balance, error } = await supabase
+    .from('financial_transactions')
+    .select('id, amount, is_paid, balance_original_amount')
+    .eq('id', balanceId)
+    .is('deleted_at', null)
+    .maybeSingle()
+
+  throwIfError(error, 'saldo do pedido')
+  if (!balance) return
+  if (balance.is_paid && Number(balance.amount) > 0) return
+
+  const paid = await sumLinkedPayments(balanceId)
+  const original = Number(balance.balance_original_amount ?? balance.amount)
+  const remaining = roundMoney(Math.max(0, original - paid))
+  const settled = remaining <= 0
+
+  const { error: updateError } = await supabase
+    .from('financial_transactions')
+    .update({
+      amount: remaining,
+      is_paid: settled,
+      paid_date: settled ? format(new Date(), 'yyyy-MM-dd') : null,
+    })
+    .eq('id', balanceId)
+
+  throwIfError(updateError, 'atualizar saldo do pedido')
+}
+
+/** Edição manual do saldo: o valor digitado passa a ser o saldo atual. */
+export async function resetOrderBalanceOriginal(balanceId: string, currentAmount: number): Promise<void> {
+  const paid = await sumLinkedPayments(balanceId)
+  const { error } = await supabase
+    .from('financial_transactions')
+    .update({ balance_original_amount: roundMoney(currentAmount + paid) })
+    .eq('id', balanceId)
+
+  throwIfError(error, 'atualizar saldo do pedido')
 }
 
 export async function getFinancialSummary(): Promise<FinancialSummary> {

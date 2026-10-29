@@ -71,6 +71,7 @@ interface FinancialTransactionFormProps {
   purchases: LookupPurchase[]
   suppliers: LookupSupplier[]
   employees: EmployeePayrollOption[]
+  orderBalanceHint?: string | null
 }
 
 export function FinancialTransactionForm({
@@ -84,6 +85,7 @@ export function FinancialTransactionForm({
   purchases,
   suppliers,
   employees,
+  orderBalanceHint,
 }: FinancialTransactionFormProps) {
   const fields = useMemo(
     () => getFinancialFormFields(form, { isEditing: editing }),
@@ -392,6 +394,7 @@ export function FinancialTransactionForm({
               <FieldHint text="Preenchido com o salário cadastrado — altere se houver bonificação ou desconto" />
             )}
             {sinalRemainingHint && <FieldHint text={sinalRemainingHint} />}
+            {orderBalanceHint && <FieldHint text={orderBalanceHint} />}
             {form.type === 'despesa' && form.category === 'maquinario' && form.amount > 0 && Number(form.installment_total) >= 2 && (
               <FieldHint
                 text={`${form.installment_total}x de ${formatCurrency(Math.floor((form.amount * 100) / Number(form.installment_total)) / 100)} (última parcela ajusta centavos)`}

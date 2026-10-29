@@ -11,7 +11,14 @@ import {
   getOperationalMetrics,
   getFinancialDashboardMetrics,
 } from '@/services/dashboard.service'
-import { getFinancialSummary, getFinancialSettings, listFinancialTransactions, type FinancialTransactionFilters } from '@/services/financial.service'
+import {
+  getFinancialSummary,
+  getFinancialSettings,
+  getOrderBalanceForPayment,
+  listFinancialTransactions,
+  listOpenOrderBalances,
+  type FinancialTransactionFilters,
+} from '@/services/financial.service'
 import {
   computeLumberCreditStats,
   getLumberCreditSettings,
@@ -119,6 +126,22 @@ export function useFinancialSettings() {
     queryKey: queryKeys.financialSettings,
     queryFn: getFinancialSettings,
     staleTime: 60_000,
+  })
+}
+
+export function useOpenOrderBalances() {
+  return useQuery({
+    queryKey: queryKeys.openOrderBalances,
+    queryFn: listOpenOrderBalances,
+  })
+}
+
+export function useOrderBalanceForPayment(orderId: string, linkedBalanceId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.orderBalanceForPayment(orderId, linkedBalanceId),
+    queryFn: () => getOrderBalanceForPayment(orderId, linkedBalanceId),
+    enabled: Boolean(orderId),
+    staleTime: 0,
   })
 }
 

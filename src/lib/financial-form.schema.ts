@@ -475,6 +475,14 @@ export function shouldShowRecurringMonthsField(form: FinancialFormState): boolea
   return true
 }
 
+/** Pagamento de pedido no caixa da empresa → abate o saldo gerado pelo Sinal */
+export function isOrderBalancePaymentForm(form: FinancialFormState): boolean {
+  return form.type === 'receita'
+    && form.category === 'pedido'
+    && Boolean(form.order_id)
+    && form.cash_destination === 'empresa'
+}
+
 /** Maquinário ou despesa em boleto com 2+ parcelas → cronograma interno */
 export function isInstallmentPlanExpense(form: FinancialFormState): boolean {
   if (form.type !== 'despesa') return false

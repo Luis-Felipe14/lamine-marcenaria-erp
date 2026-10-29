@@ -4,7 +4,7 @@ import { Plus, Pencil, TrendingUp, TrendingDown, Trash2, ListOrdered, X } from '
 import { toast } from 'sonner'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
-import { PageContent, PageDataZone, PageKpiZone } from '@/components/shared/PageLayout'
+import { PageContent, PageDataZone, PageKpiZone, PageZoneLabel } from '@/components/shared/PageLayout'
 import { DataTable } from '@/components/shared/DataTable'
 import { TableToolbar } from '@/components/shared/TableToolbar'
 import { StatCard, StatGrid } from '@/components/shared/StatCard'
@@ -25,6 +25,7 @@ import {
   getFinancialFormFields,
   getRecurringFixedBillMonthCount,
   isInstallmentPlanExpense,
+  isOrderBalancePaymentForm,
   isRecurringFixedBillExpense,
   sanitizeFinancialPayload,
   validateFinancialForm,
@@ -44,6 +45,9 @@ import {
   isDefaultFinancialTransactionFilters,
   listInstallmentSchedules,
   markInstallmentPaid,
+  recomputeOrderBalance,
+  resetOrderBalanceOriginal,
+  resolveOrderBalanceForPayment,
   type FinancialInstallmentSchedule,
   type FinancialTransaction,
   type FinancialTransactionFilters,
@@ -51,6 +55,8 @@ import {
 import {
   useFinancialSummary,
   useFinancialTransactions,
+  useOpenOrderBalances,
+  useOrderBalanceForPayment,
   useLookupClients,
   useLookupOrders,
   useLookupPurchases,
@@ -79,6 +85,8 @@ export function FinancialPage() {
   const [payingScheduleId, setPayingScheduleId] = useState<string | null>(null)
 
   const { data: txResult, isLoading, isFetching } = useFinancialTransactions(page, filters)
+  const { data: openBalances = [], isLoading: balancesLoading } = useOpenOrderBalances()
+  const openBalancesTotal = openBalances.reduce((sum, row) => sum + Number(row.amount), 0)
   const { data: summary = { receitas: 0, despesas: 0, aPagar: 0, aReceber: 0 } } = useFinancialSummary()
   const { canViewAmounts, canEditFinancial } = useSecretaryAccess()
   const { data: clients = [] } = useLookupClients()
@@ -91,6 +99,24 @@ export function FinancialPage() {
   const totalPages = txResult?.totalPages ?? 1
   const showFinancialSummary = canViewAmounts
   const money = (value: number) => formatCurrencyMasked(value, canViewAmounts, formatCurrency)
+
+  const balanceLookupOrderId = dialogOpen && !editing?.is_order_balance && isOrderBalancePaymentForm(form)
+    ? form.order_id
+    : ''
+  const linkedBalanceId = editing && editing.order_id === form.order_id
+    ? editing.balance_transaction_id ?? null
+    : null
+  const { data: orderBalance } = useOrderBalanceForPayment(balanceLookupOrderId, linkedBalanceId)
+
+  let orderBalanceHint: string | null = null
+  if (balanceLookupOrderId && orderBalance) {
+    const returned = linkedBalanceId === orderBalance.id ? Number(editing?.amount ?? 0) : 0
+    const available = Math.round((orderBalance.amount + returned) * 100) / 100
+    const after = Math.round((available - (Number(form.amount) || 0)) * 100) / 100
+    orderBalanceHint = after < 0
+      ? `Valor maior que o saldo em aberto deste pedido (${money(available)})`
+      : `Saldo em aberto do pedido: ${money(available)} — após este pagamento: ${after === 0 ? 'quitado' : money(after)}`
+  }
 
   const yearOptions = useMemo(() => {
     const current = new Date().getFullYear()
@@ -120,6 +146,22 @@ export function FinancialPage() {
     if (!canEditFinancial) return
     setEditing(null)
     setForm(createEmptyFinancialForm())
+    setDialogOpen(true)
+  }
+
+  const openRegisterPayment = (balance: Transaction) => {
+    if (!canEditFinancial) return
+    setEditing(null)
+    setForm({
+      ...createEmptyFinancialForm('receita'),
+      category: 'pedido',
+      description: balance.order?.number ? `Pagamento — Pedido #${balance.order.number}` : 'Pagamento do pedido',
+      amount: Number(balance.amount),
+      due_date: new Date().toISOString().split('T')[0],
+      client_id: balance.client_id ?? '',
+      order_id: balance.order_id ?? '',
+      cash_destination: 'empresa',
+    })
     setDialogOpen(true)
   }
 
@@ -216,17 +258,38 @@ export function FinancialPage() {
               : 'Lançamento convertido em boleto parcelado!',
           )
         } else {
+          const previousBalanceId = editing.balance_transaction_id ?? null
+          const balanceTransactionId = !editing.is_order_balance && isOrderBalancePaymentForm(form)
+            ? await resolveOrderBalanceForPayment({
+              orderId: form.order_id,
+              amount: Number(form.amount),
+              previous: {
+                balanceId: previousBalanceId,
+                orderId: editing.order_id,
+                amount: Number(editing.amount),
+              },
+            })
+            : null
           await updateRecord('financial_transactions', editing.id, {
             ...payload,
             is_installment_plan: false,
             plan_total_amount: null,
+            balance_transaction_id: balanceTransactionId,
           })
+          if (editing.is_order_balance) {
+            await resetOrderBalanceOriginal(editing.id, Number(payload.amount))
+          }
+          for (const balanceId of new Set([previousBalanceId, balanceTransactionId])) {
+            if (balanceId) await recomputeOrderBalance(balanceId)
+          }
           if (isRecurringFixedBillExpense(form)) {
             const count = getRecurringFixedBillMonthCount(form)
             const created = await appendRecurringFixedBillMonths(payload, count)
             toast.success(
               `Lançamento atualizado e ${created} mês(es) seguinte(s) criado(s) — edite cada um se o valor variar`,
             )
+          } else if (balanceTransactionId || previousBalanceId) {
+            toast.success('Lançamento atualizado e saldo do pedido recalculado!')
           } else {
             toast.success('Lançamento atualizado!')
           }
@@ -245,7 +308,17 @@ export function FinancialPage() {
           `${count} lançamentos de contas fixas criados — edite cada mês se o valor variar (ex.: energia, água)`,
         )
       } else {
-        await createRecord('financial_transactions', { ...payload, is_paid: false })
+        const balanceTransactionId = isOrderBalancePaymentForm(form)
+          ? await resolveOrderBalanceForPayment({ orderId: form.order_id, amount: Number(form.amount) })
+          : null
+        await createRecord('financial_transactions', {
+          ...payload,
+          is_paid: false,
+          balance_transaction_id: balanceTransactionId,
+        })
+        if (balanceTransactionId) {
+          await recomputeOrderBalance(balanceTransactionId)
+        }
 
         let remainingCreated = false
         if (form.type === 'receita' && form.category === 'sinal' && form.order_id) {
@@ -264,6 +337,8 @@ export function FinancialPage() {
                 payment_method: null,
                 notes: 'Gerado automaticamente a partir do lançamento de sinal',
                 is_paid: false,
+                is_order_balance: true,
+                balance_original_amount: remaining,
                 document_number: null,
                 installment_number: null,
                 installment_total: null,
@@ -279,8 +354,10 @@ export function FinancialPage() {
 
         toast.success(
           remainingCreated
-            ? 'Sinal lançado e saldo restante enviado para A Receber!'
-            : 'Lançamento criado!',
+            ? 'Sinal lançado! O saldo restante está em "Saldos a receber dos pedidos"'
+            : balanceTransactionId
+              ? 'Pagamento lançado e abatido do saldo do pedido!'
+              : 'Lançamento criado!',
         )
       }
       setDialogOpen(false)
@@ -340,7 +417,12 @@ export function FinancialPage() {
 
     try {
       await softDelete('financial_transactions', row.id)
-      toast.success('Lançamento excluído')
+      if (row.balance_transaction_id) {
+        await recomputeOrderBalance(row.balance_transaction_id)
+        toast.success('Lançamento excluído e valor devolvido ao saldo do pedido')
+      } else {
+        toast.success('Lançamento excluído')
+      }
       await invalidateFinancial()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao excluir')
@@ -394,6 +476,7 @@ export function FinancialPage() {
                 purchases={purchases}
                 suppliers={suppliers}
                 employees={employees}
+                orderBalanceHint={orderBalanceHint}
               />
               {editing?.is_installment_plan && (
                 <p className="mt-2 text-xs text-gray-500">
@@ -416,6 +499,93 @@ export function FinancialPage() {
           </StatGrid>
         </PageKpiZone>
       )}
+
+      <PageDataZone label="Saldos a receber dos pedidos">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <PageZoneLabel>Saldos a receber dos pedidos</PageZoneLabel>
+          {openBalances.length > 0 && (
+            <span className="text-xs text-gray-400">
+              {openBalances.length} {openBalances.length === 1 ? 'pedido' : 'pedidos'} · Total em aberto {money(openBalancesTotal)}
+            </span>
+          )}
+        </div>
+        <DataTable
+          columns={[
+            { key: 'client', header: 'Cliente', render: (r) => r.client?.name ?? '—' },
+            { key: 'order', header: 'Pedido', render: (r) => (r.order?.number ? `#${r.order.number}` : '—') },
+            {
+              key: 'original',
+              header: 'Saldo do sinal',
+              render: (r) => money(Number(r.balance_original_amount ?? r.amount)),
+            },
+            {
+              key: 'paid',
+              header: 'Já pago',
+              render: (r) => money(Math.max(0, Number(r.balance_original_amount ?? r.amount) - Number(r.amount))),
+            },
+            {
+              key: 'amount',
+              header: 'Falta receber',
+              render: (r) => <span className="font-medium text-gold">{money(Number(r.amount))}</span>,
+            },
+            {
+              key: 'due_date',
+              header: 'Vencimento',
+              render: (r) => {
+                const urgency = getDueUrgency(r.due_date, false)
+                const label = getDueUrgencyLabel(urgency, r.due_date)
+                return (
+                  <div className="flex flex-col gap-1">
+                    <span>{formatDate(r.due_date)}</span>
+                    {label && (
+                      <Badge
+                        variant={urgency === 'overdue' || urgency === 'today' ? 'danger' : 'warning'}
+                        className="w-fit"
+                      >
+                        {label}
+                      </Badge>
+                    )}
+                  </div>
+                )
+              },
+            },
+            {
+              key: 'actions',
+              header: '',
+              render: (r) => canEditFinancial ? (
+                <div className="flex items-center gap-1">
+                  <Button size="sm" variant="outline" onClick={() => openRegisterPayment(r)}>
+                    Registrar pagamento
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => openEdit(r)}
+                    aria-label="Editar saldo"
+                    title="Editar saldo"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => void handleDelete(r)}
+                    aria-label="Excluir saldo"
+                    title="Excluir saldo"
+                  >
+                    <Trash2 className="h-3.5 w-3.5 text-red-400" />
+                  </Button>
+                </div>
+              ) : null,
+            },
+          ]}
+          data={openBalances}
+          loading={balancesLoading}
+          emptyMessage="Nenhum saldo de pedido em aberto"
+        />
+      </PageDataZone>
 
       <TableToolbar panel zoneLabel="Filtros">
         <div className="flex flex-wrap items-center gap-2">
@@ -503,7 +673,24 @@ export function FinancialPage() {
       <DataTable
         columns={[
           { key: 'type', header: 'Tipo', render: (r) => <Badge variant={r.type === 'receita' ? 'success' : 'danger'}>{r.type === 'receita' ? 'Receita' : 'Despesa'}</Badge> },
-          { key: 'description', header: 'Descrição', render: (r) => r.employee?.name ?? r.description },
+          {
+            key: 'description',
+            header: 'Descrição',
+            render: (r) => (
+              <div className="flex flex-col">
+                <span>{r.employee?.name ?? r.description}</span>
+                {r.balance_transaction_id && (
+                  <span className="text-[10px] text-gray-500">Abatido do saldo do pedido</span>
+                )}
+                {r.is_order_balance && r.balance_original_amount != null
+                  && Number(r.balance_original_amount) > Number(r.amount) && (
+                  <span className="text-[10px] text-gray-500">
+                    Saldo original {money(Number(r.balance_original_amount))}
+                  </span>
+                )}
+              </div>
+            ),
+          },
           { key: 'link', header: 'Vínculo', render: (r) => <span className="text-xs text-gray-400">{linkLabel(r)}</span> },
           { key: 'category', header: 'Categoria', render: (r) => getFinancialCategoryLabel(r.category) },
           { key: 'document_number', header: 'NF', render: (r) => r.document_number || '—' },
